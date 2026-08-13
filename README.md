@@ -1,4 +1,4 @@
-# ascii city
+# GO ascii city
 
 A procedural city rendered as coloured ASCII characters, with a raycaster and a
 terminal frontend.
