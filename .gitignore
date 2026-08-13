@@ -1,0 +1,12 @@
+# Build output
+*.exe
+*.exe~
+/city
+/dump
+
+# Frames written by cmd/dump
+/shots/
+shots/
+
+# Working notes and scratch, kept out of the tree
+_local/
