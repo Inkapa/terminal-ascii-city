@@ -62,7 +62,7 @@ func step(p Player, in Input, dt float64) (dx, dz float64) {
 		in.Strafe /= l
 	}
 	sin, cos := math.Sin(p.Yaw), math.Cos(p.Yaw)
-	// Yaw zero looks toward -z; right of that is +x.
+	// Yaw zero looks toward -z, and right of that is +x.
 	fx, fz := sin, -cos
 	rx, rz := cos, sin
 	return (fx*in.Forward + rx*in.Strafe) * speed * dt,
@@ -119,19 +119,34 @@ func blocksWay(kind int) bool {
 	case PropShrub:
 		return false
 	case PropTree, PropBench, PropPlanter, PropPost, PropShelter, PropSignal,
-		PropPhoneBox, PropVending, PropTable, PropHydrant, PropRailing, PropMonument:
+		PropPhoneBox, PropVending, PropTable, PropHydrant, PropRailing, PropMonument,
+		PropShelving, PropCounter, PropLift, PropTerminal:
 		return true
 	}
 	return false
 }
 
-// Blocked reports whether the collision box overlaps anything solid at a point
-// on a floor.
+// Blocked reports whether the collision box overlaps anything solid at a
+// point on a floor: the wall grid, or a piece of furniture.
 func (in *Interior) Blocked(x, z float64) bool {
 	for _, c := range corners(x, z) {
 		cx, cz := int(math.Floor(c[0])), int(math.Floor(c[1]))
 		i := in.At(cx, cz)
 		if i < 0 || in.Kinds[i] != openCell || in.Obstacles[i] != 0 {
+			return true
+		}
+	}
+	for i := range in.Props {
+		p := &in.Props[i]
+		if !blocksWay(p.Kind) {
+			continue
+		}
+		half := math.Max(0.35, p.Width/2)
+		deep := math.Max(0.35, p.Depth/2)
+		if p.Axis == 1 {
+			half, deep = deep, half
+		}
+		if math.Abs(x-p.X) < half+PlayerRadius && math.Abs(z-p.Z) < deep+PlayerRadius {
 			return true
 		}
 	}

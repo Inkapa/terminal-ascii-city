@@ -4,7 +4,7 @@ package engine
 //
 // A floor is a separate 32 by 32 grid, built on demand from the site index and
 // the floor number and dropped when the camera leaves. It is not part of the
-// city map; the two are linked only through the site record.
+// city map. The two are linked only through the site record.
 //
 // Every floor has the same shell: a three-cell wall, open floor inside it,
 // glazing down both flanks and across the front, one doorway. What fills the
@@ -109,18 +109,16 @@ func (w *World) Interior(siteIndex, floor int) *Interior {
 	}
 
 	in.shell()
-	arrangement := interiorLayout[d.Archetype]
-	seed := []int{building.PlanID, floor, arrangement}
-	switch arrangement {
+	switch interiorLayout[d.Archetype] {
 	case layoutRooms:
 		in.partitions()
-		in.deskGrid(seed)
+		in.deskGrid()
 	case layoutBays:
-		in.workbenches(seed)
+		in.workbenches()
 	case layoutAisles:
-		in.shelving(seed)
+		in.shelving()
 	default:
-		in.deskGrid(seed)
+		in.deskGrid()
 	}
 	in.fixtures(floor, building.Height)
 	return in
@@ -183,7 +181,7 @@ func (in *Interior) partitions() {
 }
 
 // deskGrid fills the floor with desks, each with a chair pulled up to it.
-func (in *Interior) deskGrid(seed []int) {
+func (in *Interior) deskGrid() {
 	for row := 0; row < 3; row++ {
 		for bay := 0; bay < 3; bay++ {
 			x := 7 + bay*7
@@ -200,7 +198,7 @@ func (in *Interior) deskGrid(seed []int) {
 }
 
 // workbenches runs long benches down the floor, stepped at each end.
-func (in *Interior) workbenches(seed []int) {
+func (in *Interior) workbenches() {
 	for bay := 0; bay < 3; bay++ {
 		x := 8 + bay*7
 		for _, z0 := range []int{6, 16} {
@@ -220,7 +218,7 @@ func (in *Interior) workbenches(seed []int) {
 }
 
 // shelving stands runs of shelves with a walkway between them.
-func (in *Interior) shelving(seed []int) {
+func (in *Interior) shelving() {
 	for bay := 0; bay < 4; bay++ {
 		x := 6 + bay*6
 		for z := 8; z <= 21; z++ {

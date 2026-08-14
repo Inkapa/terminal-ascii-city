@@ -21,7 +21,6 @@ const (
 	PropSignal
 	PropPhoneBox
 	PropVending
-	PropBicycle
 	PropTable
 	PropHydrant
 	PropRailing
@@ -29,7 +28,7 @@ const (
 )
 
 // propDepth is how deep a prop is, front to back. A prop with a depth is a box
-// and shows two faces; one without is a flat billboard.
+// and shows two faces. One without is a flat billboard.
 var propDepth = map[int]float64{
 	PropBench:    0.68,
 	PropPlanter:  0.68,
@@ -135,8 +134,6 @@ func Furnish(w *World) []Prop {
 						add(px, pz, PropPlanter, 1.05, 0.75, 0)
 					case mod(along, 32) == 26 && roll > 0.6:
 						add(px, pz, PropHydrant, 0.8, 0.75, 0)
-					case mod(along, 32) == 18 && roll > 0.72:
-						add(px, pz, PropBicycle, 1.05, 1.7, axis)
 					}
 				}
 
