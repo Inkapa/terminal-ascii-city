@@ -44,7 +44,7 @@ func Generate(originX, originZ, size int) *World {
 			w.stampBlock(bx, bz)
 		}
 	}
-	// Blocks may already have put a landmark or two down; the lattice rules
+	// Blocks may already have put a landmark or two down. The lattice rules
 	// fill in everything else.
 	w.Props = append(w.Props, Furnish(w)...)
 	w.indexProps()
@@ -102,25 +102,26 @@ func (w *World) stampBlock(bx, bz int) {
 	w.scatterShrubs(bx, bz)
 }
 
-// scatterShrubs puts low planting along the footways, on a three-cell lattice
-// with a hash gate so it is scattered rather than continuous.
+// scatterShrubs puts small ornamental trees along the footways, on a six-cell
+// lattice with a hash gate so they stand alone rather than as a hedge. They
+// are shorter and sparser than the avenue trees lineTrees plants.
 func (w *World) scatterShrubs(bx, bz int) {
 	originX, originZ := bx*BlockSpan, bz*BlockSpan
 	for z := 0; z < BlockSpan; z++ {
 		for x := 0; x < BlockSpan; x++ {
 			wx, wz := originX+x, originZ+z
-			if mod(wx, 3) != 1 || mod(wz, 3) != 1 {
+			if mod(wx, 6) != 1 || mod(wz, 6) != 1 {
 				continue
 			}
 			i := w.indexOfWorld(wx, wz)
 			if i < 0 || w.Kinds[i] != KindOpen || w.Surfaces[i] != SurfacePavement {
 				continue
 			}
-			if Hash01(wx, wz, saltPlanting+1) < 0.72 || w.acrossADoorway(float64(wx-w.OriginX), float64(wz-w.OriginZ), 1.6) {
+			if Hash01(wx, wz, saltPlanting+1) < 0.82 || w.acrossADoorway(float64(wx-w.OriginX), float64(wz-w.OriginZ), 1.6) {
 				continue
 			}
-			w.Kinds[i] = PropShrub
-			w.Heights[i] = 2
+			w.Kinds[i] = PropTree
+			w.Heights[i] = 3
 		}
 	}
 }
@@ -264,8 +265,12 @@ func (w *World) stampBuilding(bx, bz, slot int, p plot, l layout) {
 		}
 	}
 
-	// The two cells the door itself sits in: the back wall of the recess.
-	for _, c := range recessWall(p, edge, rx0, rz0, rx1, rz1) {
+	// The two cells the door sits in, the back wall of the recess, plus the
+	// jambs either side of the opening. The jambs are footprint cells whose
+	// inward face the notch exposes, and they carry no shopfront lettering.
+	recessCells := recessWall(p, edge, rx0, rz0, rx1, rz1)
+	recessCells = append(recessCells, recessJambs(edge, rx0, rz0, rx1, rz1)...)
+	for _, c := range recessCells {
 		if i := w.indexOfWorld(originX+c[0], originZ+c[1]); i >= 0 {
 			w.EntranceRecess[i] = 1
 			w.EntranceSiteAt[i] = uint16(id)
@@ -285,6 +290,17 @@ func recessWall(p plot, edge, rx0, rz0, rx1, rz1 int) [][2]int {
 		return [][2]int{{rx1 + 1, rz0}, {rx1 + 1, rz1}}
 	default:
 		return [][2]int{{rx0 - 1, rz0}, {rx0 - 1, rz1}}
+	}
+}
+
+// recessJambs is the pair of footprint cells either side of the recess
+// opening, the ones whose inward face is exposed by the notch next to them.
+func recessJambs(edge, rx0, rz0, rx1, rz1 int) [][2]int {
+	switch edge {
+	case edgeNorth, edgeSouth:
+		return [][2]int{{rx0 - 1, rz0}, {rx0 - 1, rz1}, {rx1 + 1, rz0}, {rx1 + 1, rz1}}
+	default:
+		return [][2]int{{rx0, rz0 - 1}, {rx1, rz0 - 1}, {rx0, rz1 + 1}, {rx1, rz1 + 1}}
 	}
 }
 

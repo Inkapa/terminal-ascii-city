@@ -45,7 +45,8 @@ func TestChunksAgreeWhereTheyOverlap(t *testing.T) {
 }
 
 // Every building must have exactly one way in: a two by two recess with four
-// threshold cells and the two cells of the door behind it.
+// threshold cells, the two cells of the door behind it, and the four jamb
+// cells either side of the opening that also read as part of the recess.
 func TestEveryBuildingHasOneEntrance(t *testing.T) {
 	w := Generate(3712, 3968, 512)
 	floors := map[uint16]int{}
@@ -69,8 +70,8 @@ func TestEveryBuildingHasOneEntrance(t *testing.T) {
 		if floors[uint16(b.ID)] != 4 {
 			t.Fatalf("building %d has %d threshold cells, want 4", b.ID, floors[uint16(b.ID)])
 		}
-		if doors[uint16(b.ID)] != 2 {
-			t.Fatalf("building %d has %d door cells, want 2", b.ID, doors[uint16(b.ID)])
+		if doors[uint16(b.ID)] != 6 {
+			t.Fatalf("building %d has %d door and jamb cells, want 6", b.ID, doors[uint16(b.ID)])
 		}
 	}
 	if checked < 100 {
