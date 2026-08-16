@@ -29,7 +29,9 @@ type face struct {
 	rowTop   int
 	rowBot   int
 	span     int
-	leading  bool // this column starts the face, so it draws the corner pillar
+	side     uint8 // 0 = an X-facing face, 1 = a Z-facing face
+	leading  bool  // this column starts the face, so it draws the corner pillar
+	trailing bool  // this column ends the face, so it draws the matching seam
 	baseB    float64
 	colN     int // which sixth of the cell the ray crossed
 	hue      float64
@@ -60,7 +62,7 @@ type signboard struct {
 
 // resolveFace works out everything about one wall face before any of its cells
 // are painted, so the per-cell work stays cheap.
-func (r *Renderer) resolveFace(w engine.Wall, col, rowTop, rowBot int, leading bool) face {
+func (r *Renderer) resolveFace(w engine.Wall, col, rowTop, rowBot int, leading, trailing bool) face {
 	idx := r.world.At(w.CX, w.CZ)
 	sx := float64(r.world.OriginX + w.CX)
 	sz := float64(r.world.OriginZ + w.CZ)
@@ -87,6 +89,7 @@ func (r *Renderer) resolveFace(w engine.Wall, col, rowTop, rowBot int, leading b
 		arch = r.world.Architectures[idx]
 		litFrac = float64(r.world.Lit[idx]) / 100
 	}
+	hue, sat = haze(hue, sat, w.Perp, 20, FogDistance)
 
 	// Brightness: distance, a per-cell jitter so a run of identical cells is
 	// not perfectly flat, a darker side for one of the two face directions,
@@ -109,7 +112,9 @@ func (r *Renderer) resolveFace(w engine.Wall, col, rowTop, rowBot int, leading b
 		rowTop:   rowTop,
 		rowBot:   rowBot,
 		span:     rowBot - rowTop,
+		side:     w.Side,
 		leading:  leading,
+		trailing: trailing,
 		baseB:    baseB,
 		colN:     int(6 * w.TexX()),
 		hue:      hue,
@@ -122,30 +127,29 @@ func (r *Renderer) resolveFace(w engine.Wall, col, rowTop, rowBot int, leading b
 		surfaceZ: sz,
 		signHue:  math.Mod(hue+88+41*float64(style), 360),
 	}
-	f.sfRow = int(math.Ceil(r.view.Row(shopfrontHeight, w.Perp, EyeHeight)))
+	f.sfRow = clampInt(int(math.Ceil(r.view.Row(shopfrontHeight, w.Perp, EyeHeight))), rowTop, rowBot)
 	f.sfTmax = rowBot - max(rowTop+1, f.sfRow)
 	f.sign = r.resolveSign(f, w.Side)
 	return f
 }
 
 // resolveSign decides whether this face carries a lit sign and, if so, where
-// it sits and what it reads. Signs are rare and are keyed to the block, so one
-// building carries the same sign on the same wall every time.
+// it sits and what it reads. Signs are keyed to the building and the side of
+// it, so every column along a wall agrees on one sign.
+//
+// The sign is sized and centred in block-relative coordinates and is wide
+// enough to need a face spanning most of the block, which only a landmark
+// has. On any narrower layout it would run past the building's corner.
 func (r *Renderer) resolveSign(f face, side uint8) signboard {
-	if f.height < 18 {
+	if f.height < 18 || f.arch == 0 {
 		return signboard{}
 	}
-	bx := int(math.Floor(f.surfaceX / 32))
-	bz := int(math.Floor(f.surfaceZ / 32))
-	along := f.surfaceX
-	if side == 0 {
-		along = f.surfaceZ
+	idx := r.world.At(f.cx, f.cz)
+	if idx < 0 {
+		return signboard{}
 	}
-	faceKey := float64(2*int(side)) + 0
-	if floorMod(int(along), 32) > 23 {
-		faceKey++
-	}
-	seed := hashRand(97*float64(bx)+1301*faceKey+7000, 89*float64(bz)+1877*faceKey+9000)
+	faceKey := float64(r.world.BuildingIDs[idx])*2 + float64(side)
+	seed := hashRand(1301*faceKey+7000, 1877*faceKey+9000)
 	if seed <= 0.9 {
 		return signboard{}
 	}
@@ -155,22 +159,21 @@ func (r *Renderer) resolveSign(f face, side uint8) signboard {
 		u += 32
 	}
 	// Two shapes of sign: a tall single letter, or a wide word.
-	single := hashRand(313*float64(bx)+1999*faceKey+12000, 439*float64(bz)+2713*faceKey+14000) > 0.72
+	single := hashRand(1999*faceKey+12000, 2713*faceKey+14000) > 0.72
 	width, height := 10.5, 2.45
 	if single {
 		width, height = 4.8, 4.2
 	}
-	centre := 24 + 3*(hashRand(577*float64(bx)+37*faceKey, 811*float64(bz)+53*faceKey)-0.5)
+	centre := 24 + 3*(hashRand(37*faceKey, 53*faceKey)-0.5)
 	su := (u - (centre - 0.5*width)) / width
 	if su < 0 || su >= 1 {
 		return signboard{}
 	}
 
-	bottom := 3.8 + hashRand(997*float64(bx)+83*faceKey, 1291*float64(bz)+101*faceKey)*
+	bottom := 3.8 + hashRand(83*faceKey, 101*faceKey)*
 		math.Min(4.5, f.height-height-5.3)
 	top := bottom + height
-	rowTop := int(math.Ceil(r.view.Row(top, f.perp, EyeHeight)))
-	rowBot := int(math.Floor(r.view.Row(bottom, f.perp, EyeHeight)))
+	rowTop, rowBot := r.view.RowSpan(top, bottom, f.perp, EyeHeight, r.cfg.Rows)
 	if rowBot-rowTop < 3 {
 		return signboard{}
 	}
@@ -213,7 +216,7 @@ func (r *Renderer) paintFacadeCell(col, row int, f face) {
 	switch {
 	case idx >= 0 && r.world.EntranceRecess[idx] != 0 && row >= f.sfRow:
 		r.paintEntrance(col, row, f, b, tv, int(r.world.EntranceSiteAt[idx]))
-	case idx >= 0 && r.world.AccessibleMask[idx] != 0 && row >= f.sfRow:
+	case idx >= 0 && r.world.AccessibleMask[idx] != 0 && (row >= f.sfRow || r.onLabelRow(col, row, int(r.world.AccessibleSiteAt[idx]))):
 		r.paintShopfront(col, row, f, b, tex, tv, int(r.world.AccessibleSiteAt[idx]))
 	case f.sign.present && row >= f.sign.rowTop && row <= f.sign.rowBot:
 		r.paintSign(col, row, f, b)
@@ -240,8 +243,11 @@ func (r *Renderer) paintWallBody(col, row int, f face, b, tex float64, tx, ty in
 	}
 
 	switch {
-	case f.leading && row < f.rowBot:
-		// The vertical edge of the face, lit hard so buildings separate.
+	case (f.leading || f.trailing) && row < f.rowBot:
+		// The vertical edge of the face, a dark seam that separates two
+		// buildings of close hue. Its lightness stays low and nearly flat
+		// instead of scaling with b, so the seam survives once distance has
+		// flattened everything around it.
 		glyph := '|'
 		if f.arch == 1 {
 			glyph = '\\'
@@ -249,7 +255,7 @@ func (r *Renderer) paintWallBody(col, row int, f face, b, tex float64, tx, ty in
 				glyph = '/'
 			}
 		}
-		r.screen.Set(col, row, glyph, hsl(f.hue, 100, 42+44*b))
+		r.screen.Set(col, row, glyph, hsl(f.hue, 20, 3+2*b))
 
 	case f.height >= 4 && window:
 		if tex < f.litFrac {
@@ -323,13 +329,14 @@ func (r *Renderer) paintShopfront(col, row int, f face, b, tex float64, tv, site
 		}
 		r.screen.Set(col, row, glyph, hsl(st.FrameHue, 38, 30+22*b))
 
-	case t == f.sfTmax && f.sfTmax >= 3:
-		label := stripSpaces(look.Label)
-		if label == "" {
+	case r.onLabelRow(col, row, siteIndex):
+		// Which letter goes here was settled for the whole frontage before
+		// anything was painted. See planLabels.
+		i, _, _ := r.labelCell(col, siteIndex)
+		if i >= len(look.Label) || look.Label[i] == ' ' {
 			return
 		}
-		i := abs(int(math.Floor(2*f.wallPos))) % len(label)
-		r.screen.Set(col, row, rune(label[i]), hsl(st.AccentHue, 90, 54+22*b))
+		r.screen.Set(col, row, rune(look.Label[i]), hsl(st.AccentHue, 90, 54+22*b))
 
 	case edgeCol || t%patternBand[st.Pattern] == 0:
 		glyph := '='
@@ -399,7 +406,7 @@ func (r *Renderer) paintPlainShopfront(col, row int, f face, b, tex float64) {
 	switch {
 	case t == 0:
 		r.screen.Set(col, row, '_', hsl(f.hue, 25, 18+12*b))
-	case f.leading && t < 3:
+	case (f.leading || f.trailing) && t < 3:
 		r.screen.Set(col, row, '|', hsl(f.hue, 100, 46+38*b))
 	case t == f.sfTmax && f.sfTmax >= 3:
 		set := "$@%&"
@@ -449,16 +456,6 @@ func (r *Renderer) paintSign(col, row int, f face, b float64) {
 		light = 12 + 14*b
 	}
 	r.screen.Set(col, row, glyph, hsl(s.hue, sat, light))
-}
-
-func stripSpaces(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		if s[i] != ' ' {
-			out = append(out, s[i])
-		}
-	}
-	return string(out)
 }
 
 func abs(v int) int {

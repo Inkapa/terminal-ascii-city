@@ -55,6 +55,19 @@ func (s *Screen) SetBg(x, y int, bg RGB) {
 	s.Cells[y*s.Cols+x].Bg = bg
 }
 
+// Darken scales a cell's colours toward black by amt (0 leaves it alone, 1
+// makes it black), for a contact shadow thrown by whatever is nearer in a
+// neighbouring column.
+func (s *Screen) Darken(x, y int, amt float64) {
+	if x < 0 || y < 0 || x >= s.Cols || y >= s.Rows {
+		return
+	}
+	c := &s.Cells[y*s.Cols+x]
+	f := 1 - amt
+	c.Fg = RGB{byteOf(float64(c.Fg[0]) * f), byteOf(float64(c.Fg[1]) * f), byteOf(float64(c.Fg[2]) * f)}
+	c.Bg = RGB{byteOf(float64(c.Bg[0]) * f), byteOf(float64(c.Bg[1]) * f), byteOf(float64(c.Bg[2]) * f)}
+}
+
 // At reads one cell.
 func (s *Screen) At(x, y int) Cell {
 	if x < 0 || y < 0 || x >= s.Cols || y >= s.Rows {
@@ -63,7 +76,7 @@ func (s *Screen) At(x, y int) Cell {
 	return s.Cells[y*s.Cols+x]
 }
 
-// hsl converts an HSL colour to RGB. Hue is in degrees and wraps; saturation
+// hsl converts an HSL colour to RGB. Hue is in degrees and wraps, saturation
 // and lightness are percentages and clamp. Everything in the picture is
 // authored this way, so brightness is a single number to scale.
 func hsl(h, s, l float64) RGB {

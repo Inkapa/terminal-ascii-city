@@ -8,10 +8,10 @@ import (
 
 // Street furniture, drawn as billboards carrying small pieces of ASCII art.
 //
-// A prop is not a scaled sprite. Its art is mapped onto a plane placed in the
-// world, and each screen column solves for where its ray crosses that plane.
-// The art keeps its proportions, tracks parallax and foreshortens at an angle.
-// A prop with a depth draws two planes, far one first.
+// A prop's art is mapped onto a plane placed in the world, and each screen
+// column solves for where its ray crosses that plane, so the art keeps its
+// proportions, tracks parallax and foreshortens at an angle. A prop with a
+// depth draws two planes, far one first.
 
 // frontArt is what a prop shows on its wide face.
 var frontArt = map[int][]string{
@@ -19,19 +19,18 @@ var frontArt = map[int][]string{
 	engine.PropPlanter:  {".---.", "|###|", "|###|", "'---'"},
 	engine.PropPost:     {" o ", " | ", " | ", "_=_"},
 	engine.PropShelter:  {"+--BUS--+", "|:::::::|", "|:     :|", "|:_____:|", "|_|   |_|"},
-	engine.PropSignal:   {" [R] ", " [A] ", " [G] ", "  |  ", "  |  ", " _=_ "},
+	engine.PropSignal:   {" [R] ", " [Y] ", " [G] ", "  |  ", "  |  ", " _=_ "},
 	engine.PropPhoneBox: {"+--TEL--+", "| [::] |", "| [::] |", "| [__] |", "+-------+"},
 	engine.PropVending:  {"+--POP--+", "| 0000 |", "| 0000 |", "|  [$] |", "+-------+"},
-	engine.PropBicycle:  {"  __o  ", " _/<,  ", "(_)/(_)"},
 	engine.PropTable:    {" o   o ", "-==+==-", "   |   ", "  / \\  "},
 	engine.PropHydrant:  {" _O_ ", "--O--", "  |  ", "_/ \\_"},
 	engine.PropRailing:  {"+-+-+-+-+", "| | | | |", "| | | | |"},
 	engine.PropShelving: {"+--STOCK--+", "|0[]00[]0|", "|========|", "|[]00[]00|", "+========+"},
 	engine.PropCounter:  {"+--PAY--+", "| 0  [$] |", "+========+"},
-	engine.PropTerminal: {"+--NODE--+", "| [LINK] |", "|  >_    |", "| [E] USE|", "+--------+"},
+	engine.PropTerminal: {"+--DESK--+", "| [WORK] |", "|  >_    |", "|________|", "+--------+"},
 	engine.PropLift: {
 		"+----LIFT----+",
-		"|[STANDBY]   |",
+		"|[WAITING]   |",
 		"|+----++----+|",
 		"||<<<<||>>>>||",
 		"||<<<<||>>>>||",
@@ -50,7 +49,7 @@ var frontArt = map[int][]string{
 		"    /_|||_\\    ",
 		"   /==|||==\\   ",
 		"  /___|||___\\  ",
-		" [TRANSMITTER] ",
+		" [OBSERVATORY] ",
 		"+=============+",
 	},
 }
@@ -61,7 +60,7 @@ var sideArt = map[int][]string{
 	engine.PropPlanter:  {".--.", "|##|", "|##|", "'--'"},
 	engine.PropPost:     {"o", "|", "|", "="},
 	engine.PropShelter:  {"+---+", "|:::|", "|   |", "|___|", "|_|_|"},
-	engine.PropSignal:   {"[R]", "[A]", "[G]", " | ", " | ", "_=_"},
+	engine.PropSignal:   {"[R]", "[Y]", "[G]", " | ", " | ", "_=_"},
 	engine.PropPhoneBox: {"+TEL+", "|::|", "|::|", "|__|", "+---+"},
 	engine.PropVending:  {"+---+", "|000|", "|[$]|", "|###|", "+---+"},
 	engine.PropTable:    {"+==+", "|##|", "+==+"},
@@ -77,8 +76,8 @@ func init() {
 }
 
 // palette is the colour a prop's glyphs take. base covers everything without
-// an entry of its own; accent is the lit part, whichever glyph that is for
-// this kind of thing.
+// an entry of its own, accent the lit part, whichever glyph that is for this
+// kind of thing.
 type palette struct {
 	base   RGB
 	accent RGB
@@ -93,7 +92,7 @@ func paletteFor(kind, style int, light, time float64) palette {
 	p := palette{panel: hsl(155, 18, 3+4*light)}
 	switch kind {
 	case engine.PropSignal:
-		// The three aspects run on a three-second cycle; the two that are not
+		// The three aspects run on a three-second cycle. The two that are not
 		// showing sit dark rather than going out.
 		phase := int(time/3) % 3
 		red, amber, green := 25.0, 24.0, 22.0
@@ -108,7 +107,7 @@ func paletteFor(kind, style int, light, time float64) palette {
 		p.base = hsl(45, 25, 42+l)
 		p.byRune = map[rune]RGB{
 			'R': hsl(0, 95, red+l),
-			'A': hsl(48, 95, amber+l),
+			'Y': hsl(48, 95, amber+l),
 			'G': hsl(125, 90, green+l),
 		}
 	case engine.PropPhoneBox:
@@ -119,8 +118,6 @@ func paletteFor(kind, style int, light, time float64) palette {
 		p.lit = func(r rune) bool { return r == '0' }
 	case engine.PropHydrant:
 		p.base = hsl(8, 78, 35+l)
-	case engine.PropBicycle:
-		p.base = hsl(175, 55, 32+l)
 	case engine.PropTable:
 		p.base = hsl(38, 45, 40+l)
 	case engine.PropPost:
@@ -314,8 +311,7 @@ func (r *Renderer) paintQuad(q quad, light float64) {
 		if depth <= 0.1 || !r.visible(col, depth) {
 			return
 		}
-		top := max(0, int(math.Ceil(r.view.Row(q.base+q.height, depth, EyeHeight))))
-		bot := min(r.cfg.Rows-1, int(math.Floor(r.view.Row(q.base, depth, EyeHeight))))
+		top, bot := r.view.RowSpan(q.base+q.height, q.base, depth, EyeHeight, r.cfg.Rows)
 		for row := top; row <= bot; row++ {
 			r.screen.Set(col, row, '|', pal.base)
 		}
@@ -326,6 +322,31 @@ func (r *Renderer) paintQuad(q quad, light float64) {
 	for _, line := range art {
 		if len(line) > artW {
 			artW = len(line)
+		}
+	}
+
+	// Seen from the far side the art reads back to front.
+	flip := (alongX && r.player.Z < q.z) || (!alongX && r.player.X > q.x)
+
+	// Each run of letters holds one screen column per letter, so a word reads
+	// as itself up close while the frame and fill glyphs around it stretch.
+	// Spans are measured after the flip, in the same art columns the render
+	// loop tests below.
+	wordByRow := make(map[int][]wordCalc, 2)
+	for ri, runs := range wordSpans(art) {
+		for _, w := range runs {
+			length := w.hi - w.lo + 1
+			lo, hi := w.lo, w.hi
+			if flip {
+				lo, hi = artW-1-w.hi, artW-1-w.lo
+			}
+			wordColA := colA + (colB-colA)*float64(lo)/float64(artW)
+			wordColB := colA + (colB-colA)*float64(hi+1)/float64(artW)
+			center := 0.5 * (wordColA + wordColB)
+			wordByRow[ri] = append(wordByRow[ri], wordCalc{
+				lo: w.lo, hi: w.hi, length: length,
+				start: int(math.Round(center - float64(length)/2)),
+			})
 		}
 	}
 
@@ -358,15 +379,10 @@ func (r *Renderer) paintQuad(q quad, light float64) {
 		if depth <= 0.1 || !r.visible(col, depth) {
 			continue
 		}
-		top := max(0, int(math.Ceil(r.view.Row(q.base+q.height, depth, EyeHeight))))
-		bot := min(r.cfg.Rows-1, int(math.Floor(r.view.Row(q.base, depth, EyeHeight))))
-		if top > bot {
-			continue
-		}
+		top, bot := r.view.RowSpan(q.base+q.height, q.base, depth, EyeHeight, r.cfg.Rows)
 
 		ci := int(clamp(u*float64(artW), 0, float64(artW-1)))
-		// Seen from the far side the art reads back to front.
-		if (alongX && r.player.Z < q.z) || (!alongX && r.player.X > q.x) {
+		if flip {
 			ci = artW - 1 - ci
 		}
 
@@ -374,7 +390,29 @@ func (r *Renderer) paintQuad(q quad, light float64) {
 			ri := min(len(art)-1, (row-top)*len(art)/(bot-top+1))
 			line := art[ri]
 			ch := ' '
-			if ci < len(line) {
+			matched := false
+			for _, wc := range wordByRow[ri] {
+				// ci is already turned around for a view from the far side.
+				if ci < wc.lo || ci > wc.hi {
+					continue
+				}
+				// Letters run left to right on screen from either side, the
+				// way a two-sided sign is printed once per face.
+				rel := col - wc.start
+				li := wc.lo + rel
+				switch {
+				case rel < 0:
+					li = max(0, wc.lo-1) // frame material just before the word, extended into the gap
+				case rel >= wc.length:
+					li = min(len(line)-1, wc.hi+1) // and just after it
+				}
+				if li >= 0 && li < len(line) {
+					ch = rune(line[li])
+				}
+				matched = true
+				break
+			}
+			if !matched && ci < len(line) {
 				ch = rune(line[ci])
 			}
 			if q.boxFace {
@@ -383,6 +421,11 @@ func (r *Renderer) paintQuad(q quad, light float64) {
 				}
 			}
 			if ch == ' ' {
+				if matched {
+					// A space inside a name is part of the sign, so clear
+					// the cell rather than showing the wall behind it.
+					r.screen.Set(col, row, ' ', pal.base)
+				}
 				continue
 			}
 			colour := pal.base
@@ -411,12 +454,55 @@ func inkSpan(line string) (int, int) {
 	return lo, hi
 }
 
-// paintTree draws a street tree.
+// wordRun is one row's run of real letters, in art-column coordinates.
+type wordRun struct{ lo, hi int }
+
+// wordCalc is a wordRun with its fixed-width layout worked out for the plane's
+// current projection, leaving the render loop only the placing to do.
+type wordCalc struct {
+	lo, hi, length int
+	start          int
+}
+
+// wordSpans finds every run of lettering in a piece of art, row by row, so
+// each can be held at a fixed width rather than stretching into repeats.
+// Every run is returned, including single letters such as a traffic light's
+// colour or the E in a lift's [E] CALL, which a wide prop would otherwise blow
+// up across the screen.
 //
-// The crown is a mass sampled on a grid fixed to the tree, so the pattern
-// scales with it instead of moving over it as the camera moves. Density falls
-// off toward the edge and a hash removes cells near it, giving a ragged
-// outline. The underside is warmer, from the street light below.
+// A space between two letters stays inside the run, keeping a two-word name
+// together with its spacing. Only a character that is neither a letter nor a
+// space ends a run.
+func wordSpans(art []string) map[int][]wordRun {
+	spans := make(map[int][]wordRun)
+	for ri, line := range art {
+		runLo, runHi := -1, -1
+		flush := func() {
+			if runHi >= 0 {
+				spans[ri] = append(spans[ri], wordRun{lo: runLo, hi: runHi})
+			}
+			runLo, runHi = -1, -1
+		}
+		for i := 0; i <= len(line); i++ {
+			if i == len(line) {
+				flush()
+				break
+			}
+			switch c := line[i]; {
+			case c >= 'A' && c <= 'Z':
+				if runLo < 0 {
+					runLo = i
+				}
+				runHi = i
+			case c == ' ':
+				// Held: it only stays in the run if a letter follows.
+			default:
+				flush()
+			}
+		}
+	}
+	return spans
+}
 
 // crownGrid is how many samples the crown is divided into across its width.
 // Coarse, so the foliage forms clumps rather than single cells.
@@ -425,18 +511,18 @@ const crownGrid = 11
 // foliage runs from the densest part of the crown to the thinnest.
 const foliage = "&%#*o:."
 
+// paintTree draws a street tree. The crown is a mass sampled on a grid fixed
+// to the tree, so the pattern holds still as the camera moves. Density falls
+// off toward the edge and a hash removes cells near it, giving a ragged
+// outline. The underside is warmer, catching the street light below.
 func (r *Renderer) paintTree(p engine.Prop, depth, colF, light float64) {
 	// A crown starts a little under half way up and is about as wide as the
 	// part of the tree above the trunk is tall.
 	crownBase := 0.42 * p.Height
 	spread := 0.95 * (p.Height - crownBase)
 
-	top := max(0, int(math.Ceil(r.view.Row(p.Height, depth, EyeHeight))))
-	bottom := min(r.cfg.Rows-1, int(math.Floor(r.view.Row(0, depth, EyeHeight))))
-	if top > bottom {
-		return
-	}
-	crownBottom := min(bottom, int(math.Floor(r.view.Row(crownBase, depth, EyeHeight))))
+	top, bottom := r.view.RowSpan(p.Height, 0, depth, EyeHeight, r.cfg.Rows)
+	crownBottom := clampInt(int(math.Floor(r.view.Row(crownBase, depth, EyeHeight))), top, bottom)
 
 	// Too far away to be anything but a dark mass with a stem.
 	if bottom-top < 3 {
@@ -456,6 +542,9 @@ func (r *Renderer) paintTree(p engine.Prop, depth, colF, light float64) {
 	radY := math.Max(1, float64(crownBottom-top+1)/2)
 	key := int(p.X*4) * 7919
 	keyZ := int(p.Z*4) * 104729
+
+	bark := hsl(28, 30, 11+13*light)
+	r.paintBranches(p, colF, crownBottom, radX, bark, depth)
 
 	for col := x0; col <= x1; col++ {
 		if !r.visible(col, depth) {
@@ -488,9 +577,9 @@ func (r *Renderer) paintTree(p engine.Prop, depth, colF, light float64) {
 		}
 	}
 
-	// The trunk, flaring where it meets the ground.
-	bark := hsl(28, 30, 11+13*light)
-	trunkHalf := max(0, int(w/9))
+	// The trunk, flaring where it meets the ground. Held thin relative to the
+	// crown so it reads as a stem rather than a pillar.
+	trunkHalf := min(2, int(w/26))
 	for row := crownBottom + 1; row <= bottom; row++ {
 		flare := 0
 		if row >= bottom-1 && trunkHalf > 0 {
@@ -514,15 +603,46 @@ func (r *Renderer) paintTree(p engine.Prop, depth, colF, light float64) {
 	}
 }
 
+// paintBranches draws one or two stems reaching up from the trunk into the
+// crown. It runs before the foliage, so the stems show only through the
+// sparser cells near the crown's edge.
+func (r *Renderer) paintBranches(p engine.Prop, colF float64, crownBottom int, radX float64, bark RGB, depth float64) {
+	length := int(clamp(radX/4, 1, 3))
+	h := hashRand(13.7*p.X+1, 29.3*p.Z+1)
+	sides := []int{1}
+	switch {
+	case h < 0.35:
+		sides = []int{-1}
+	case h < 0.7:
+		sides = []int{1}
+	default:
+		sides = []int{-1, 1}
+	}
+	base := int(math.Round(colF))
+	for _, side := range sides {
+		glyph := rune('/')
+		if side < 0 {
+			glyph = '\\'
+		}
+		for step := 1; step <= length; step++ {
+			row := crownBottom - step + 1
+			col := base + side*step
+			if row < 0 || !r.visible(col, depth) {
+				continue
+			}
+			r.screen.Set(col, row, glyph, bark)
+		}
+	}
+}
+
 // paintShrub draws a planted mass: a rough ellipse of foliage over a short
 // stem, thinned by a hash so its edge is ragged rather than drawn.
 func (r *Renderer) paintShrub(p engine.Prop, depth, colF, light float64) {
 	w := r.view.ProjScale * 1.3 / depth
 	x0 := max(0, int(math.Round(colF-w/2)))
 	x1 := min(r.cfg.Cols-1, int(math.Round(colF+w/2)))
-	top := max(0, int(math.Ceil(r.view.Row(p.Height, depth, EyeHeight))))
-	bot := min(r.cfg.Rows-1, int(math.Floor(r.view.Row(0, depth, EyeHeight))))
-	stem := min(bot, max(top, int(math.Floor(r.view.Row(1.05, depth, EyeHeight)))))
+	top, bot := r.view.RowSpan(p.Height, 0, depth, EyeHeight, r.cfg.Rows)
+	stem := clampInt(int(math.Floor(r.view.Row(1.05, depth, EyeHeight))), top, bot)
 
 	midX := float64(x0+x1) / 2
 	midY := float64(top+stem) / 2
@@ -567,12 +687,12 @@ func (r *Renderer) paintShrub(p engine.Prop, depth, colF, light float64) {
 	}
 }
 
-// The prop index. There are tens of thousands of props in a chunk and only a
-// few hundred can be in view, so they are bucketed by 32-cell block and only
-// the buckets the camera can reach are visited.
-
+// propBucket is the side of one bucket of the prop index, in cells. A chunk
+// holds tens of thousands of props and only a few hundred can be in view, so
+// they are bucketed and only the buckets the camera can reach are visited.
 const propBucket = 32
 
+// indexProps buckets a chunk's props for the lookups nearbyProps makes.
 func (r *Renderer) indexProps(props []engine.Prop) {
 	side := r.world.Size/propBucket + 1
 	r.propGrid = make([][]*engine.Prop, side*side)
@@ -629,29 +749,31 @@ func (r *Renderer) signBoard() []string {
 	case 3:
 		post = "{"
 	}
-	foot := "+=============+"
-	switch st.Pattern {
-	case 4:
-		foot = "+-------------+"
-	case 5:
-		foot = "+#############+"
-	}
-
 	name := []rune{}
 	for _, c := range r.room.Label {
 		if c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == ' ' {
 			name = append(name, c)
 		}
 	}
-	if len(name) > 13 {
-		name = name[:13]
+	// The board is sized to the name, so a long one is never clipped into a
+	// different word.
+	field := max(13, len(name))
+
+	fill := "="
+	switch st.Pattern {
+	case 4:
+		fill = "-"
+	case 5:
+		fill = "#"
 	}
-	pad := 13 - len(name)
+	foot := "+" + repeat(fill, field) + "+"
+
+	pad := field - len(name)
 	head := "+" + repeat("-", pad/2) + string(name) + repeat("-", pad-pad/2) + "+"
 
 	board := []string{head}
 	for i := 0; i < 8; i++ {
-		board = append(board, post+"             "+post)
+		board = append(board, post+repeat(" ", field)+post)
 	}
 	return append(board, foot)
 }
@@ -664,8 +786,8 @@ func repeat(s string, n int) string {
 	return out
 }
 
-// frameOnly is true for the props whose lit part is everything that is not a
-// frame member, rather than one named glyph.
+// frameOnly marks the props that light everything except their frame members,
+// instead of lighting one named glyph.
 func frameOnly(r rune) bool {
 	return r != '|' && r != '=' && r != '+' && r != '-'
 }
