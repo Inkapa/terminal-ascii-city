@@ -25,18 +25,22 @@ const (
 
 // farWallSpan projects one far wall onto the rows it covers.
 func (r *Renderer) farWallSpan(w engine.FarWall) (top, bot int) {
-	top = max(0, int(math.Ceil(r.view.Row(w.Height, w.Distance, EyeHeight))))
-	bot = min(r.cfg.Rows-1, int(math.Floor(r.view.Row(0, w.Distance, EyeHeight))))
-	return
+	return r.view.RowSpan(w.Height, 0, w.Distance, EyeHeight, r.cfg.Rows)
 }
 
-// paintFarWallCell paints one cell of a distant building.
-func (r *Renderer) paintFarWallCell(col, row int, w engine.FarWall, top int) {
+// paintFarWallCell paints one cell of a distant building. leading marks the
+// column where this building starts, which is darkened so it reads as a seam
+// against whatever stood beside it, the way a near wall's corner pillar does.
+func (r *Renderer) paintFarWallCell(col, row int, w engine.FarWall, top int, leading bool) {
 	strength := clamp((skylineFar-w.Distance)/(skylineFar-skylineNear), 0, 1)
 	if strength <= 0 {
 		return
 	}
-	hue := float64(w.Hue)
+	if leading {
+		strength *= 0.45
+	}
+	hue, _ := haze(float64(w.Hue), float64(w.Saturation), w.Distance, FogDistance, skylineFar)
+	satFactor := 1 - 0.6*clamp((w.Distance-FogDistance)/(skylineFar-FogDistance), 0, 1)
 	worldY := EyeHeight + w.Distance*r.view.rowTan[row]
 
 	// Far walls tile at a fixed coarse resolution: at this range the screen
@@ -71,17 +75,17 @@ func (r *Renderer) paintFarWallCell(col, row int, w engine.FarWall, top int) {
 		case 3:
 			glyph = '*'
 		}
-		r.screen.Set(col, row, glyph, hsl(hue, 55, 15+28*strength))
+		r.screen.Set(col, row, glyph, hsl(hue, 55*satFactor, 15+28*strength))
 
 	case window && h < 0.72*lit:
 		glyph := '0'
 		if w.Distance > skylineDim {
 			glyph = '.'
 		}
-		r.screen.Set(col, row, glyph, hsl(hue, 70, 19+31*strength))
+		r.screen.Set(col, row, glyph, hsl(hue, 70*satFactor, 19+31*strength))
 
 	case window:
-		r.screen.Set(col, row, ':', hsl(hue, 28, 9+18*strength))
+		r.screen.Set(col, row, ':', hsl(hue, 28*satFactor, 9+18*strength))
 
 	default:
 		glyph := ' '
@@ -95,6 +99,6 @@ func (r *Renderer) paintFarWallCell(col, row int, w engine.FarWall, top int) {
 			return
 		}
 		body := 0.07 + 0.27*strength
-		r.screen.Set(col, row, glyph, hsl(hue, math.Max(18, 0.42*float64(w.Saturation)), 7+24*body))
+		r.screen.Set(col, row, glyph, hsl(hue, math.Max(18, 0.42*float64(w.Saturation))*satFactor, 7+24*body))
 	}
 }

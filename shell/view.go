@@ -8,15 +8,22 @@ import (
 
 // The camera and the two lookup tables every painter reads.
 //
-// The projection is a tangent mapping rather than a linear one: a world height
-// is turned into an angle first, then that angle into a row. Pitch is then a
-// plain rotation of the whole column, so looking up and down does not shear
-// the picture the way a linear projection does.
+// The projection is a tangent mapping. A world height becomes an angle first,
+// then that angle becomes a row. Pitch is a plain rotation of the whole
+// column, so looking up and down does not shear the picture.
 
-// halfPitch is the vertical half-angle of the view, in radians. It fixes the
-// focal length: everything else about the frame follows from it and the shape
-// of a character cell.
+// halfPitch is the vertical half-angle of the view at ReferenceRows, in
+// radians. Together with ReferenceRows it fixes the focal length: everything
+// else about the frame follows from it and the shape of a character cell.
 const halfPitch = 0.35
+
+// ReferenceRows is the frame height the zoom is calibrated for. The focal
+// length is held constant instead of being derived from the actual frame
+// height, so a bigger terminal shows more of the city at the same size rather
+// than the same view drawn larger. At exactly ReferenceRows the vertical field
+// of view is 2*halfPitch. Taller frames see further up and down, wider ones
+// further to the sides.
+const ReferenceRows = 40.0
 
 // EyeHeight is the camera's height above the street, in cells.
 const EyeHeight = 1.25
@@ -72,13 +79,12 @@ func NewView(cfg Config) *View {
 	v := &View{Cfg: cfg}
 	rows, cols := float64(cfg.Rows), float64(cfg.Cols)
 
-	v.Focal = rows / 2 / math.Tan(halfPitch)
+	v.Focal = ReferenceRows / 2 / math.Tan(halfPitch)
 	v.HorizonRow = rows / 2
 	v.CamCol = cols / 2
-	// The horizontal field of view is the vertical one stretched by the shape
-	// of the frame in pixels, so a square in the world stays square on screen.
-	fov := 2 * math.Atan(math.Tan(halfPitch)*cols*cfg.GlyphAspect/rows)
-	v.ProjScale = v.CamCol / math.Tan(fov/2)
+	// Columns per radian is rows per radian corrected for the shape of a
+	// character cell, so a square in the world stays square on screen.
+	v.ProjScale = v.Focal / cfg.GlyphAspect
 
 	v.planeAt = make([]float64, cfg.Cols)
 	v.RayDirX = make([]float64, cfg.Cols)
@@ -164,6 +170,46 @@ func (v *View) Row(y, perp, eyeY float64) float64 {
 	return v.HorizonRow - v.Focal*math.Tan(angle)
 }
 
+// RowSpan turns the top and bottom of a vertical extent into an ordered pair
+// of screen rows. Row returns ±Inf for a grazing angle, which close range and
+// a steep pitch reach in ordinary play, so bot is clamped against top as well
+// as against the screen. Callers loop over [top, bot] and bot must never fall
+// below top.
+func (v *View) RowSpan(topY, botY, perp, eyeY float64, rows int) (top, bot int) {
+	top = clampInt(rowOf(v.Row(topY, perp, eyeY), true), 0, rows-1)
+	bot = clampInt(rowOf(v.Row(botY, perp, eyeY), false), top, rows-1)
+	return
+}
+
+// rowOf converts a projected row to an int, keeping the sign of an infinite
+// result. Row returns -Inf off the top of the screen and +Inf off the bottom,
+// which Go's float-to-int conversion collapses to one value. The sign has to
+// survive or a later clamp sends an off-the-bottom point to the top.
+func rowOf(y float64, roundUp bool) int {
+	switch {
+	case math.IsInf(y, -1):
+		return math.MinInt32
+	case math.IsInf(y, 1):
+		return math.MaxInt32
+	case math.IsNaN(y):
+		return 0
+	case roundUp:
+		return int(math.Ceil(y))
+	default:
+		return int(math.Floor(y))
+	}
+}
+
+func clampInt(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 // HorizonAt is the row the horizon falls on for the current pitch.
 func (v *View) HorizonAt() float64 {
 	return v.HorizonRow + v.Focal*math.Tan(v.Pitch)
@@ -185,6 +231,20 @@ func (v *View) Project(x, z float64) (depth, col float64, ok bool) {
 // fog is the distance ramp every surface colour is scaled by.
 func fog(dist float64) float64 {
 	return math.Max(0, 1-dist/FogDistance)
+}
+
+// hazeHue is the blue-grey a distant colour is pulled toward, the colour of
+// looking through a long stretch of air.
+const hazeHue = 210.0
+
+// haze blends a hue and saturation toward hazeHue as dist runs from near to
+// far, so distant surfaces cool and grey out as well as dimming. It carries
+// most of the depth between two buildings of a similar hue at different
+// ranges.
+func haze(hue, sat, dist, near, far float64) (float64, float64) {
+	t := clamp((dist-near)/(far-near), 0, 1)
+	d := math.Mod(hazeHue-hue+540, 360) - 180
+	return hue + d*t, sat * (1 - 0.6*t)
 }
 
 // AimInside points the camera inside a floor plate. The room has its own

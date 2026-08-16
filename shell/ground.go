@@ -13,9 +13,8 @@ import (
 // point a cell looks at is then a single multiply, and the cell's look comes
 // from the surface it lands on.
 //
-// The road markings are not scattered: they sit on the 32-cell block lattice,
-// so kerbs, centre lines and lane dashes line up along a street the way
-// painted markings do.
+// The road markings sit on the 32-cell block lattice, so kerbs, centre lines
+// and lane dashes line up along a street the way painted markings do.
 
 // groundLimit is where the ground stops being drawn at all. It is a little
 // short of the fog distance, because by then the surface is one flat tone and
@@ -61,13 +60,13 @@ func (r *Renderer) paintGround(col, row int, dirX, dirZ float64) {
 	case engine.SurfaceWater:
 		r.paintWaterCell(col, row, wx, wz, f)
 	case engine.SurfaceRoad:
-		r.paintRoadCell(col, row, fx, fz, wx, wz, mx, mz, xHalf, zHalf, f, tex, near)
+		r.paintRoadCell(col, row, fx, fz, wx, wz, mx, mz, xHalf, zHalf, f, tex, near, dist)
 	case engine.SurfacePavement:
-		r.paintPavementCell(col, row, ix, iz, idx, lx, lz, fx, fz, mx, mz, xHalf, f, tex)
+		r.paintPavementCell(col, row, ix, iz, idx, lx, lz, fx, fz, mx, mz, xHalf, f, tex, dist)
 	case engine.SurfaceMarking:
 		r.paintMarkingCell(col, row, wx, wz, mz, f, tex, near)
 	case engine.SurfaceBoards:
-		r.paintBoardCell(col, row, ix, fx, fz, f, tex)
+		r.paintBoardCell(col, row, ix, fx, fz, f, tex, dist)
 	default:
 		glyph := '*'
 		switch {
@@ -76,12 +75,13 @@ func (r *Renderer) paintGround(col, row int, dirX, dirZ float64) {
 		case tex < 0.8:
 			glyph = '.'
 		}
-		r.screen.Set(col, row, glyph, hsl(110, 55, 18+22*f))
+		hue, sat := haze(110, 55, dist, 0, groundLimit)
+		r.screen.Set(col, row, glyph, hsl(hue, sat, 18+22*f))
 	}
 }
 
 // paintRoadCell is the carriageway: tarmac with the painted lattice on top.
-func (r *Renderer) paintRoadCell(col, row, fx, fz int, wx, wz float64, mx, mz int, xHalf, zHalf bool, f, tex float64, near bool) {
+func (r *Renderer) paintRoadCell(col, row, fx, fz int, wx, wz float64, mx, mz int, xHalf, zHalf bool, f, tex float64, near bool, dist float64) {
 	glyph := '.'
 	switch {
 	case f > 0.5:
@@ -89,7 +89,8 @@ func (r *Renderer) paintRoadCell(col, row, fx, fz int, wx, wz float64, mx, mz in
 	case f > 0.28:
 		glyph = '_'
 	}
-	colour := hsl(210, 32, 30+28*f)
+	roadHue, roadSat := haze(210, 32, dist, 0, groundLimit)
+	colour := hsl(roadHue, roadSat, 30+28*f)
 	if near && tex > 0.94 {
 		glyph = '.'
 		if f > 0.48 {
@@ -138,7 +139,7 @@ func (r *Renderer) paintRoadCell(col, row, fx, fz int, wx, wz float64, mx, mz in
 
 // paintPavementCell is the footway beside the road, and the threshold of a
 // doorway where there is one.
-func (r *Renderer) paintPavementCell(col, row, ix, iz, idx int, lx, lz float64, fx, fz, mx, mz int, xHalf bool, f, tex float64) {
+func (r *Renderer) paintPavementCell(col, row, ix, iz, idx int, lx, lz float64, fx, fz, mx, mz int, xHalf bool, f, tex, dist float64) {
 	if r.world.EntranceFloor[idx] != 0 {
 		site := r.world.Sites[max(0, int(r.world.EntranceSiteAt[idx]))]
 		e := site.Entrance
@@ -193,7 +194,8 @@ func (r *Renderer) paintPavementCell(col, row, ix, iz, idx int, lx, lz float64, 
 	case tex < 0.82:
 		glyph = '.'
 	}
-	r.screen.Set(col, row, glyph, hsl(38, 24, 46+30*f))
+	hue, sat := haze(38, 24, dist, 0, groundLimit)
+	r.screen.Set(col, row, glyph, hsl(hue, sat, 46+30*f))
 }
 
 // paintMarkingCell is the bright paint of a crossing or a stop line.
@@ -218,21 +220,23 @@ func (r *Renderer) paintMarkingCell(col, row int, wx, wz float64, mz int, f, tex
 
 // paintBoardCell is decking and yard surfaces: planks with a joint every third
 // cell.
-func (r *Renderer) paintBoardCell(col, row, ix, fx, fz int, f, tex float64) {
+func (r *Renderer) paintBoardCell(col, row, ix, fx, fz int, f, tex, dist float64) {
 	joint := fx%3 == 0 || fz%3 == 0
 	if joint {
 		glyph := '-'
 		if ix%3 == 0 {
 			glyph = '|'
 		}
-		r.screen.Set(col, row, glyph, hsl(42, 22, 48+26*f))
+		hue, sat := haze(42, 22, dist, 0, groundLimit)
+		r.screen.Set(col, row, glyph, hsl(hue, sat, 48+26*f))
 		return
 	}
 	glyph := '.'
 	if tex > 0.78 {
 		glyph = ':'
 	}
-	r.screen.Set(col, row, glyph, hsl(38, 18, 38+26*f))
+	hue, sat := haze(38, 18, dist, 0, groundLimit)
+	r.screen.Set(col, row, glyph, hsl(hue, sat, 38+26*f))
 }
 
 // paintWaterCell is open water: a slow swell of ripples with the city's lights

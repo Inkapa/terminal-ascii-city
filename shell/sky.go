@@ -13,17 +13,22 @@ import "math"
 const starHue = 135
 
 // paintSky paints one cell above the horizon.
+//
+// The haze band is judged by the angle a row looks along, which holds wherever
+// the horizon row ends up. Pitched up steeply that row can land far below the
+// frame, leaving rows that still look nearly level a long way from it.
 func (r *Renderer) paintSky(col, row int, horizon float64) {
-	above := horizon - float64(row)
-
 	bearing := r.view.Yaw + math.Atan2(r.view.planeAt[col], 1)
 	elevation := math.Atan((r.view.HorizonRow-float64(row))/r.view.Focal) + r.view.Pitch
 	v := hashRand(math.Floor(480*bearing), math.Floor(480*elevation)+8000)
 
+	hazeAngle := 7 / r.view.Focal
+	above := math.Abs(elevation) / hazeAngle
+
 	switch {
-	case above < 7:
+	case above < 1:
 		// Haze over the rooftops, thickest right on the horizon.
-		k := (7 - above) / 7
+		k := 1 - above
 		if v < 0.12*k {
 			r.screen.Set(col, row, '.', hsl(starHue, 100, 13+8*k))
 		}

@@ -33,8 +33,7 @@ func (r *Renderer) RenderInterior(in *engine.Interior, p engine.Player, time flo
 		var w engine.Wall
 		if len(near[col]) > 0 {
 			w = near[col][0]
-			wallTop = max(0, int(math.Ceil(r.view.Row(w.Height, w.Perp, EyeHeight))))
-			wallBot = min(r.cfg.Rows-1, int(math.Floor(r.view.Row(0, w.Perp, EyeHeight))))
+			wallTop, wallBot = r.view.RowSpan(w.Height, 0, w.Perp, EyeHeight, r.cfg.Rows)
 			r.colDepth[col] = w.Perp
 		} else {
 			r.colDepth[col] = math.Inf(1)
@@ -125,14 +124,10 @@ func (r *Renderer) paintRoomFloor(col, row int, dirX, dirZ float64) {
 	}
 }
 
-// paintRoomWall draws one cell of an interior wall or partition.
-//
-// A wall is not one surface. It is a skirting at the floor, a rail at waist
-// height, a field of panels between pilasters above that, and a cornice where
-// it meets the ceiling. Setting those out by real height rather than by
-// screen rows is what keeps the proportions right whether the wall is across
-// the room or at arm's length, and what stops the whole thing reading as one
-// repeating texture.
+// A wall is made of a skirting at the floor, a rail at waist height, a field
+// of panels between pilasters above that, and a cornice where it meets the
+// ceiling. These are set out by real height rather than by screen rows, so the
+// proportions hold whether the wall is across the room or at arm's length.
 const (
 	skirting = 0.34 // how far the skirting board reaches up
 	dadoLow  = 0.92 // and where the rail above it sits
@@ -140,6 +135,7 @@ const (
 	cornice  = 0.55 // how far below the ceiling the cornice starts
 )
 
+// paintRoomWall draws one cell of an interior wall or partition.
 func (r *Renderer) paintRoomWall(col, row, top, bot int, w engine.Wall, in *engine.Interior) {
 	span := bot - top
 	// A room is lit, so it falls off far more gently than a street does.
@@ -153,12 +149,10 @@ func (r *Renderer) paintRoomWall(col, row, top, bot int, w engine.Wall, in *engi
 	// How far up the wall this cell looks, in metres rather than in rows.
 	y := EyeHeight + w.Perp*r.view.rowTan[row]
 	cellSize := math.Max(w.Perp/r.view.ProjScale, w.Perp*r.view.rowDelta[row])
-	p := texelSize(cellSize)
 	// Where along the wall, in bays. A bay is a little under two metres.
 	bay := int(math.Floor(w.WallPos / 1.75))
 	acrossBay := math.Mod(math.Abs(w.WallPos), 1.75) / 1.75
 	tex := texture(w.WallPos, y, cellSize, 5*float64(w.CX), 3*float64(w.CZ))
-	_ = p
 
 	switch {
 	case y < skirting:
@@ -202,8 +196,8 @@ func (r *Renderer) paintRoomWall(col, row, top, bot int, w engine.Wall, in *engi
 // paintGlazing draws a window: a frame around a hole with the city in it.
 func (r *Renderer) paintGlazing(col, row, top, bot int, w engine.Wall, in *engine.Interior, outside *Screen) {
 	// The glazing does not run the full height of the wall. It is a band set
-	// in a frame, with a spandrel below it and a deep head above, which is
-	// what stops a window reading as a hole punched through the whole storey.
+	// in a frame, with a spandrel below it and a deep head above, so a window
+	// does not read as a hole punched through the whole storey.
 	span := bot - top
 	head := top + max(1, int(0.30*float64(span)))
 	sill := top + max(head+1, int(0.62*float64(span)))
