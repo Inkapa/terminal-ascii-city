@@ -19,6 +19,7 @@ import (
 )
 
 func main() {
+	seed := flag.Int("seed", 0, "world seed")
 	originX := flag.Int("x", 3712, "world x the chunk starts at")
 	originZ := flag.Int("z", 3968, "world z the chunk starts at")
 	size := flag.Int("size", 512, "how many cells across the chunk is")
@@ -32,6 +33,7 @@ func main() {
 	floorNo := flag.Int("floor", 0, "which floor of it")
 	out := flag.String("out", "shots", "directory to write the frames into")
 	flag.Parse()
+	engine.SetSeed(*seed)
 
 	world := engine.Generate(*originX, *originZ, *size)
 	cfg := shell.Config{Cols: *cols, Rows: *rows, GlyphAspect: 5.5 / 9}

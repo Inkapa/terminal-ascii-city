@@ -10,7 +10,7 @@ import (
 // Nearly every cell carries a different colour, so the plain encoding is large.
 // Two reductions: a colour escape goes out only when the colour differs from
 // the previous cell, and a row is sent only if it differs from the last frame.
-// A still frame costs a few bytes; a moving one costs a full repaint.
+// A still frame costs a few bytes, a moving one a full repaint.
 
 // Encoder writes frames to a terminal, remembering what it last sent.
 type Encoder struct {
@@ -77,6 +77,39 @@ func (e *Encoder) Frame(s *Screen) error {
 	e.buf = append(e.buf, "\x1b[0m"...)
 	_, err := e.w.Write(e.buf)
 	return err
+}
+
+// Ansi renders a full frame as a truecolour ANSI string, one line per row and
+// no cursor movement of its own, for a caller that owns the terminal and does
+// its own placement.
+func Ansi(s *Screen) string {
+	buf := make([]byte, 0, s.Cols*s.Rows*12)
+	var fg, bg RGB
+	for y := 0; y < s.Rows; y++ {
+		if y > 0 {
+			buf = append(buf, '\n')
+		}
+		row := s.Cells[y*s.Cols : (y+1)*s.Cols]
+		haveColour := false
+		for _, c := range row {
+			if !haveColour || c.Fg != fg {
+				fg = c.Fg
+				buf = appendColour(buf, 38, fg)
+			}
+			if !haveColour || c.Bg != bg {
+				bg = c.Bg
+				buf = appendColour(buf, 48, bg)
+			}
+			haveColour = true
+			ch := c.Ch
+			if ch == 0 {
+				ch = ' '
+			}
+			buf = appendRune(buf, ch)
+		}
+		buf = append(buf, "\x1b[0m"...)
+	}
+	return string(buf)
 }
 
 func sameRow(a, b []Cell) bool {

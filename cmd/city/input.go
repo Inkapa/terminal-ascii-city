@@ -1,8 +1,9 @@
 package main
 
 import (
-	"os"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Reading the keyboard.
@@ -15,12 +16,11 @@ import (
 // than the auto-repeat interval, short enough that release registers quickly.
 const heldFor = 160 * time.Millisecond
 
-// keyboard tracks when each key was last seen.
+// keyboard tracks when each key was last seen. bubbletea delivers presses as
+// messages, so nothing here reads stdin.
 type keyboard struct {
-	bytes   chan []byte
-	pending []byte
-	seen    map[key]time.Time
-	quit    bool
+	seen map[key]time.Time
+	quit bool
 }
 
 type key byte
@@ -41,79 +41,30 @@ const (
 )
 
 func newKeyboard() *keyboard {
-	k := &keyboard{bytes: make(chan []byte, 16), seen: map[key]time.Time{}}
-	go func() {
-		buf := make([]byte, 256)
-		for {
-			n, err := os.Stdin.Read(buf)
-			if n > 0 {
-				b := make([]byte, n)
-				copy(b, buf[:n])
-				k.bytes <- b
-			}
-			if err != nil {
-				close(k.bytes)
-				return
-			}
-		}
-	}()
-	return k
+	return &keyboard{seen: map[key]time.Time{}}
 }
 
-// poll takes in whatever has arrived since the last frame.
-func (k *keyboard) poll() {
-	for {
-		select {
-		case b, ok := <-k.bytes:
-			if !ok {
-				k.quit = true
-				return
-			}
-			k.pending = append(k.pending, b...)
-		default:
-			k.parse()
-			return
-		}
-	}
-}
-
-// parse turns the pending bytes into key presses, leaving behind any escape
-// sequence that has not finished arriving.
-func (k *keyboard) parse() {
+// handle folds one bubbletea key message into the held-key state.
+func (k *keyboard) handle(msg tea.KeyMsg) {
 	now := time.Now()
-	for len(k.pending) > 0 {
-		c := k.pending[0]
-		if c == 0x1b {
-			// An escape sequence, or the escape key on its own.
-			if len(k.pending) < 3 {
-				if len(k.pending) == 1 {
-					// Give the rest of the sequence a chance to arrive.
-					return
-				}
-				if k.pending[1] != '[' && k.pending[1] != 'O' {
-					k.pending = k.pending[1:]
-					continue
-				}
-				return
-			}
-			if k.pending[1] == '[' || k.pending[1] == 'O' {
-				switch k.pending[2] {
-				case 'A':
-					k.press(keyLookUp, now)
-				case 'B':
-					k.press(keyLookDown, now)
-				case 'C':
-					k.press(keyTurnRight, now)
-				case 'D':
-					k.press(keyTurnLeft, now)
-				}
-				k.pending = k.pending[3:]
-				continue
-			}
-			k.pending = k.pending[1:]
-			continue
-		}
-
+	switch msg.Type {
+	case tea.KeyCtrlC:
+		k.quit = true
+		return
+	case tea.KeyUp:
+		k.press(keyLookUp, now)
+		return
+	case tea.KeyDown:
+		k.press(keyLookDown, now)
+		return
+	case tea.KeyLeft:
+		k.press(keyTurnLeft, now)
+		return
+	case tea.KeyRight:
+		k.press(keyTurnRight, now)
+		return
+	}
+	for _, c := range msg.Runes {
 		switch c {
 		case 'w', 'W':
 			k.press(keyForward, now)
@@ -133,14 +84,13 @@ func (k *keyboard) parse() {
 			k.press(keyLookDown, now)
 		case 'e', 'E':
 			k.press(keyUse, now)
-		case 'q', 3: // q or ctrl-c
+		case 'q':
 			k.quit = true
 		}
 		// An upper-case letter means shift is held, which selects the run speed.
 		if c >= 'A' && c <= 'Z' {
 			k.press(keySprint, now)
 		}
-		k.pending = k.pending[1:]
 	}
 }
 
