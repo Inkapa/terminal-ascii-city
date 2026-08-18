@@ -1,16 +1,15 @@
-# GO ascii city
+# Terminal ASCII city
 
-A procedural city rendered as coloured ASCII characters, with a raycaster and a
-terminal frontend.
+A procedural raycasted city rendered as coloured ASCII characters inside a terminal.
 
-The map is generated from world coordinates on demand: streets, blocks,
-buildings, planting and street furniture. A raycaster turns the camera's view
-into a grid of glyphs and colours. Buildings have interiors, and the city is
-visible through their windows.
+![Screenshot of the rendered city](https://files.catbox.moe/x7ys44.png)
 
-```
-go run ./cmd/city
-```
+Streets, blocks, buildings, planting and props are all generated from world
+coordinates on demand. Buildings can be walked into.
+
+#### A live version of this project can be accessed on `SSHELLO`, my TUI projects hub.
+
+`SSHELLO` can be accessed through the `ssh liam.gl` command in your terminal, or through my website at https://byronic.art/sshello
 
 ## Contents
 
@@ -19,39 +18,37 @@ go run ./cmd/city
 - [Layout](#layout)
 - [Glyph and colour](#glyph-and-colour)
 - [The map](#the-map)
-- [Interiors](#interiors)
-- [Determinism](#determinism)
-- [Collision](#collision)
 - [Terminal output](#terminal-output)
 - [Building and testing](#building-and-testing)
-- [Extending it](#extending-it)
 
 ## Running it
 
 ```
-W A S D   move and strafe, shift to run
-arrows    turn and look, or J L I K
-E         enter a doorway, or leave one
-Q         quit
+go run ./cmd/city
 ```
 
 The frame fills the terminal and follows it on resize. The bottom row shows the
-camera position and, when a doorway is in range, its label.
+camera position, the direction it faces, and whatever `E` would do from here.
+
+Walking never runs out of city. The loaded chunk regenerates around the camera
+once it comes within sight of an edge. Each run uses a random seed unless
+`-seed` gives one. The status row shows the seed in use.
 
 The terminal needs 24-bit colour escapes. On Windows the older console host
 needs escape processing enabled, which the program does itself.
 
-| flag | |
-| --- | --- |
-| `-x`, `-z` | world coordinates of the chunk to load |
-| `-size` | chunk side, in cells |
-| `-cols`, `-rows` | fixed frame size instead of the terminal size |
+| flag |                                                                |
+| --- |----------------------------------------------------------------|
+| `-seed` | generation seed, omit it for a random one                      |
+| `-x`, `-z` | world coordinates of the first chunk to load                   |
+| `-size` | chunk side, in cells, smaller chunks recentre more often       |
+| `-cols`, `-rows` | fixed frame size instead of the terminal size                  |
 | `-aspect` | character cell width over height, if the image looks stretched |
-| `-fps` | frame rate cap |
+| `-fps` | frame rate cap                                                 |
 
 ## PNG output
 
-`cmd/dump` runs the same camera with a fixed timestep and writes PNGs:
+`cmd/dump` runs the same camera with a fixed timestep and writes PNGs.
 
 ```
 go run ./cmd/dump -out shots -frames 4 -every 60 -warm 300
@@ -67,8 +64,8 @@ cmd/city    terminal frontend
 cmd/dump    PNG frontend
 ```
 
-The dependency runs one way. `engine` has no knowledge of screens; `shell`
-reads engine data and does not modify it. A frontend drives both and reads
+Dependencies run one way. `engine` knows nothing about screens. `shell` reads
+engine data without modifying it. A frontend drives both and reads
 `shell.Screen`.
 
 ```go
@@ -80,84 +77,50 @@ screen := renderer.Render(frame, clock)
 
 ## Glyph and colour
 
-A character cell carries two independent signals, and the renderer keeps them
-separate:
+Each surface computes one brightness, from distance, facing, and where the cell
+sits on the wall. Brightness picks a glyph off the density ramp `@%#&8ZX*+:.`
+down to a space, and sets the L of the colour. Hue and saturation come from the
+material, so colours are built in HSL.
 
-- the glyph carries luminance, through a density ramp from `@` down to a space;
-- the colour carries material, in HSL so brightness is a single factor.
-
-A wall's hue comes from the map, its brightness from distance and from position
-on the wall, and its glyph from the two combined.
+Distance also pulls colour toward a haze tint. Wall faces darken along both
+edges, which separates neighbouring buildings of a similar hue at range.
 
 ## The map
 
-The street network divides the plane into 32-cell blocks. An eight-cell
-carriageway runs down the middle of each axis, with a four-cell footway either
-side. Where a footway meets the carriageway crossing it, the road carries
+Streets divide the plane into 32-cell blocks. An eight-cell carriageway runs
+down each axis with a four-cell footway either side, and the two meet in
 crossing paint.
 
-Block contents are chosen by weight from a hash of the block coordinates:
+A hash of the block coordinates picks the layout by weight. Two are open
+ground, a park and a decked water garden with a pond. The rest place buildings
+in five arrangements, four bars around a planted court, four towers with a
+cross of alleys, a block halved along one axis, one building inset from every
+side, and one filling the block.
 
-| layout | |
-| --- | --- |
-| park | open block, planted |
-| water garden | open block, decked, with a pond |
-| pinwheel | four bars around a planted court |
-| quadrants | four square towers with a cross of alleys |
-| two bars | block halved along one axis |
-| inset | one building set in from all sides |
-| tall, full | one building filling the block, or all but a margin |
+Every footprint has a two by two recess for its entrance, door on the two wall
+cells behind it. The same hash gives each building a use and a name.
 
-Every footprint has a two by two recess cut into one edge. Those four cells are
-the entrance threshold; the two wall cells behind them carry the door.
+Street props use the same lattice. Benches, shelters and phone boxes go in the
+kerb lane, smaller things in the lane behind, the rest inside the blocks.
 
-Street furniture uses the same lattice: the kerb lane takes benches, shelters
-and phone boxes, the lane behind takes smaller items, and block interiors take
-the rest.
-
-## Interiors
-
-A floor is a separate 32 by 32 grid, built on demand from the site index and
-the floor number. It is not part of the city map; the two are linked through
-the site record.
-
-Every floor has the same shell: a three-cell wall, open floor inside it,
-glazing down both flanks and across the front, one doorway. The arrangement
-inside depends on the building's use, and the sign over the doorway matches the
-frontage outside.
-
-The glazing is a hole rather than a texture. The city is rendered from the
-doorway's position in the street and copied through the glazing cells, dimmed.
-
-## Determinism
-
-Every generative and visual value is a function of world coordinates.
-Scattered choices use a hash; anything that tiles uses an ordered dither
-sampled at a resolution that halves with distance. Nothing reads a clock or a
-random source.
-
-Three consequences:
-
-- Chunks that overlap agree cell for cell, and adjoining chunks line up. There
-  is a test for it.
-- Surface texture stays fixed to the surface as the camera moves.
-- A frame replays exactly, so a bad frame can be reproduced.
-
-## Collision
-
-A step is applied one axis at a time: the whole x component, kept if the result
-is clear, then the whole z component. An angled step into a wall keeps its
-sideways component. The camera has a small collision box and all four of its
-corners are tested, so a diagonal step cannot pass through a building corner.
-Buildings and street furniture are solid; low planting is not.
+Interiors are separate 32 by 32 grids, built from the building index and floor
+number on entry. The street is cast a second time from the doorway and copied through the glazing cells,
+dimmed.
 
 ## Terminal output
 
-A colour escape is emitted only when the colour differs from the previous cell,
-and a row is sent only if it differs from the last frame.
+A frame is a `shell.Screen`, a grid of glyph plus colour. Two ways to put one
+on a terminal:
 
-At 200x50 that is about 70KB per frame while moving and seven bytes when
-static. A frame takes roughly a millisecond to build at that size.
+`Ansi` returns the frame as one truecolour string for a caller that places it
+itself. `cmd/city` hands that to bubbletea, which owns the alt screen, the
+cursor and resizes.
+
+`Encoder` writes to an `io.Writer` and keeps the last frame, emitting a colour
+escape only when the colour changes from the previous cell and a row only when
+it changed since the last frame. A still frame costs a few bytes.
+
+A frame takes roughly a millisecond to build at 200x50.
 
 ## Building and testing
 
@@ -167,25 +130,8 @@ go vet ./...
 go test ./...
 ```
 
-`gofmt` is the only style rule. `engine` and `shell` use the standard library
-alone. `cmd/city` additionally needs `golang.org/x/term` and `golang.org/x/sys`
-for raw terminal mode.
+`gofmt` is the only style rule. 
 
-## Extending it
-
-**A block layout.** Add an entry to `layouts` in `engine/city.go` with its
-weight and plots, and adjust the other weights to keep the total at one.
-Footprints, entrances and sites are stamped from the plots.
-
-**Street furniture.** Add a constant in `engine/props.go` with its depth, place
-it in `Furnish`, and add art and a palette in `shell/furniture.go`. Whether it
-is solid is one line in `engine/move.go`.
-
-**A facade style.** Add a palette to `facadeStyles` in `shell/style.go` and a
-row to each pattern table beside it.
-
-**An interior arrangement.** Add a layout constant in `engine/interior.go`, map
-the uses that should get it, and write the function that fills the plate.
-
-**A frontend.** Drive `engine` and `shell` and read `shell.Screen`.
-`shell.Plain` and `Screen.Image` are the two existing examples.
+The terminal frontend is built on
+[bubbletea](https://github.com/charmbracelet/bubbletea). `engine` and `shell`
+are standard library only.
