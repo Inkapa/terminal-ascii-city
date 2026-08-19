@@ -6,7 +6,7 @@ import (
 )
 
 // A ray must report a wall only where one actually rises into view. Behind a
-// tall building nothing is visible, so the list stays short; a taller wing
+// tall building nothing is visible, so the list stays short. A taller wing
 // further along does show, and gets its own layer.
 func TestCastKeepsOnlyWhatRises(t *testing.T) {
 	w := blankWorld()

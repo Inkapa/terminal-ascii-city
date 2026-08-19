@@ -2,9 +2,9 @@ package engine
 
 // What a building is, and what its sign says.
 //
-// This is map data, not a rendering choice: the frontage outside and the
-// fittings inside both need it, and they have to agree. Hashed from the block
-// and the plot index, so it is never stored.
+// The frontage outside and the fittings inside both read this and have to
+// agree on it, so it belongs to the map. Hashed from the block and the plot
+// index, never stored.
 
 // A use is what a building is for, and the word its sign ends with.
 type use struct {

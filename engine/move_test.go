@@ -43,7 +43,7 @@ func TestWallsStopYou(t *testing.T) {
 // An angled step into a wall should carry along it rather than stop.
 func TestYouSlideAlongWalls(t *testing.T) {
 	room := blankRoom()
-	// A wall across the top of the room; approach it diagonally.
+	// A wall across the top of the room, approached diagonally.
 	p := Player{X: 16, Z: 6, Yaw: math.Pi / 4}
 	start := p.X
 	for i := 0; i < 120; i++ {

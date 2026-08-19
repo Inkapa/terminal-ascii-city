@@ -3,8 +3,8 @@
 // produces them and the movement rules. It has no knowledge of screens.
 package engine
 
-// MapSize is a sensible size to load a chunk at. It is a default, not a limit:
-// a chunk carries its own size and everything reads it from there.
+// MapSize is the default size to load a chunk at. A chunk carries its own
+// size and everything reads it from there, so any size works.
 const MapSize = 512
 
 // Cell kinds carried by the Kinds layer. Anything above KindBuilding is a
@@ -129,7 +129,7 @@ type Player struct {
 }
 
 // Wall is one near-field wall crossing on a column's ray. Perp is the
-// perpendicular distance, which is also the column's depth key; WallPos is the
+// perpendicular distance, which is also the column's depth key. WallPos is the
 // world coordinate along the face the ray crossed, used to tile the facade.
 type Wall struct {
 	Perp    float64

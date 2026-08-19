@@ -49,7 +49,7 @@ const (
 )
 
 // Cast walks one ray per column and returns the walls each one crosses.
-// projScale is the renderer's focal length in columns; the two must agree or
+// projScale is the renderer's focal length in columns. The two must agree or
 // the walls will not line up with the projection.
 func Cast(w *World, p Player, cols int, projScale float64) ([][]Wall, [][]FarWall) {
 	near := make([][]Wall, cols)

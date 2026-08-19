@@ -2,6 +2,6 @@
 
 package main
 
-// enableColour has nothing to do anywhere else: escape sequences are how a
-// terminal has always worked.
+// enableColour is a no-op outside Windows, where terminals handle escape
+// sequences without being asked.
 func enableColour() error { return nil }

@@ -89,8 +89,8 @@ func glyphBitmap(r rune) [glyphH]string {
 	return [glyphH]string{".....", "#####", "#####", "#####", "#####", "#####", "....."}
 }
 
-// Image rasterises the screen. scale is pixels per bitmap pixel; at scale 2 a
-// cell is 11 by 18 pixels.
+// Image rasterises the screen. scale is pixels per bitmap pixel, so at scale 2
+// a cell is 11 by 18 pixels.
 func (s *Screen) Image(scale int) *image.RGBA {
 	if scale < 1 {
 		scale = 1

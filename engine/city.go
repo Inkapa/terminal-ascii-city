@@ -2,7 +2,7 @@ package engine
 
 // Filling the blocks.
 //
-// The street network divides the plane into blocks; this decides what stands
+// The street network divides the plane into blocks. This decides what stands
 // in each one. A block gets one of seven layouts, drawn by weight from a hash
 // of the block's coordinates:
 //
@@ -16,7 +16,7 @@ package engine
 //	full            one building filling it completely
 //
 // Each footprint has a two by two recess cut into one edge. Those four cells
-// are the entrance threshold; the two wall cells behind them carry the door.
+// are the entrance threshold. The two wall cells behind them carry the door.
 
 // A block's buildable interior. The rest of the block is the footway around
 // it, and outside that the carriageway.
@@ -55,11 +55,11 @@ type layout struct {
 	pond    bool  // and whether there is water in the middle of it
 }
 
-// layouts are drawn in this order against a single roll, so their weights are
-// a cumulative distribution. They add up to one.
 // wholeBlock is the block's interior, from the footway inward.
 var wholeBlock = plot{16, 16, 31, 31, edgeAny}
 
+// layouts are drawn in this order against a single roll, so their weights are
+// a cumulative distribution. They add up to one.
 var layouts = []layout{
 	{
 		// A park: nothing built, the whole interior planted.
