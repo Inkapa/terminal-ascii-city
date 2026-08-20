@@ -7,6 +7,8 @@ A procedural raycasted city rendered as coloured ASCII characters inside a termi
 Streets, blocks, buildings, planting and props are all generated from world
 coordinates on demand. Buildings can be walked into.
 
+---
+
 #### A live version of this project can be accessed on `SSHELLO`, my TUI projects hub.
 
 `SSHELLO` can be accessed through the `ssh liam.gl` command in your terminal, or through my website at https://byronic.art/sshello
