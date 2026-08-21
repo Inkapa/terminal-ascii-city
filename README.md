@@ -1,17 +1,20 @@
-# Terminal ASCII city
-
-A procedural raycasted city rendered as coloured ASCII characters inside a terminal.
-
-![Screenshot of the rendered city](https://files.catbox.moe/x7ys44.png)
-
-Streets, blocks, buildings, planting and props are all generated from world
-coordinates on demand. Buildings can be walked into.
-
----
+<div align="center">
+ 
+![](https://files.catbox.moe/5zw28f.png)
+ 
+A procedural raycasted city rendered as coloured ASCII characters inside your terminal.
+</div>
 
 #### A live version of this project can be accessed on `SSHELLO`, my TUI projects hub.
 
 `SSHELLO` can be accessed through the `ssh liam.gl` command in your terminal, or through my website at https://byronic.art/sshello
+
+---
+ 
+![Screenshot of the rendered city](https://files.catbox.moe/x7ys44.png)
+
+Streets, blocks, buildings, planting and props are all procedurally generated from world
+coordinates. Buildings have multiple floors and can be entered. 
 
 ## Contents
 
