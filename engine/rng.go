@@ -24,6 +24,7 @@ const (
 	saltUse
 	saltName
 	saltMonument
+	saltPark
 )
 
 // worldSeed shifts every hash, so one set of coordinates gives a different

@@ -1,6 +1,9 @@
 package engine
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 // Nothing may be built on the road. A footprint that strayed onto the
 // carriageway would wall off a street and trap anything driving down it.
@@ -161,5 +164,113 @@ func TestDoorwaysAreWhereTheySay(t *testing.T) {
 	}
 	if checked < 100 {
 		t.Fatalf("only %d doorways were checked", checked)
+	}
+}
+
+// A park has to be more than a green square: a walk right round the edge, one
+// across it each way, a pool or a monument where they meet, and trees on the
+// lawns between.
+func TestParkIsLaidOut(t *testing.T) {
+	w := Generate(3712, 3968, 512)
+	g := wholeBlock
+	checked := 0
+	for bz := floorDiv(w.OriginZ, BlockSpan) + 1; bz < floorDiv(w.OriginZ+w.Size, BlockSpan)-1; bz++ {
+		for bx := floorDiv(w.OriginX, BlockSpan) + 1; bx < floorDiv(w.OriginX+w.Size, BlockSpan)-1; bx++ {
+			l, _ := layoutOf(bx, bz)
+			if !l.park {
+				continue
+			}
+			checked++
+			originX, originZ := bx*BlockSpan, bz*BlockSpan
+			at := func(x, z int) uint8 { return w.Surfaces[w.indexOfWorld(originX+x, originZ+z)] }
+
+			for n := g.x0; n <= g.x1; n++ {
+				for _, c := range [][2]int{{n, g.z0}, {n, g.z1}, {g.x0, n}, {g.x1, n}} {
+					if at(c[0], c[1]) != SurfacePath {
+						t.Fatalf("park %d,%d: the walk round the edge breaks at %d,%d", bx, bz, c[0], c[1])
+					}
+				}
+			}
+
+			// The walk in from each side, as far as the round in the middle.
+			mid := (g.x0 + g.x1) / 2
+			for n := g.x0; n <= mid; n++ {
+				for _, c := range [][2]int{{n, mid}, {mid, n}} {
+					if s := at(c[0], c[1]); s != SurfacePath && s != SurfaceWater {
+						t.Fatalf("park %d,%d: the walk across it breaks at %d,%d", bx, bz, c[0], c[1])
+					}
+				}
+			}
+
+			if at(mid, mid) != SurfaceWater {
+				found := false
+				for _, p := range w.Props {
+					near := math.Abs(p.X-float64(originX+mid-w.OriginX)) < 2 &&
+						math.Abs(p.Z-float64(originZ+mid-w.OriginZ)) < 2
+					if p.Kind == PropMonument && near {
+						found = true
+					}
+				}
+				if !found {
+					t.Fatalf("park %d,%d: nothing stands where the walks meet", bx, bz)
+				}
+			}
+
+			// The fence has to hold all the way round and open at each gate.
+			lx := float64(originX - w.OriginX)
+			lz := float64(originZ - w.OriginZ)
+			midX := float64(g.x0+g.x1+1) / 2
+			near, far := float64(g.x0)-0.5, float64(g.x1)+1.5
+			for _, side := range [][2]float64{
+				{midX, near}, {midX, far}, {near, midX}, {far, midX},
+			} {
+				if w.Blocked(lx+side[0], lz+side[1]) {
+					t.Fatalf("park %d,%d: the gate at %.1f,%.1f is shut", bx, bz, side[0], side[1])
+				}
+			}
+			for _, side := range [][2]float64{
+				{float64(g.x0) + 2.5, near}, {float64(g.x0) + 2.5, far},
+				{near, float64(g.z0) + 2.5}, {far, float64(g.z0) + 2.5},
+			} {
+				if !w.Blocked(lx+side[0], lz+side[1]) {
+					t.Fatalf("park %d,%d: the fence at %.1f,%.1f is missing", bx, bz, side[0], side[1])
+				}
+			}
+
+			// Seats belong on the grass beside a walk, never on one.
+			seats := 0
+			for _, p := range w.Props {
+				if p.Kind != PropBench {
+					continue
+				}
+				x := int(p.X) + w.OriginX - originX
+				z := int(p.Z) + w.OriginZ - originZ
+				if x < g.x0 || x > g.x1 || z < g.z0 || z > g.z1 {
+					continue
+				}
+				seats++
+				if w.Surfaces[w.indexOfWorld(originX+x, originZ+z)] != SurfaceGrass {
+					t.Fatalf("park %d,%d: a bench stands off the grass at %d,%d", bx, bz, x, z)
+				}
+			}
+			if seats < 4 {
+				t.Fatalf("park %d,%d: only %d benches beside its walks", bx, bz, seats)
+			}
+
+			trees := 0
+			for z := g.z0; z <= g.z1; z++ {
+				for x := g.x0; x <= g.x1; x++ {
+					if w.Kinds[w.indexOfWorld(originX+x, originZ+z)] == PropTree {
+						trees++
+					}
+				}
+			}
+			if trees < 4 {
+				t.Fatalf("park %d,%d: only %d trees on its lawns", bx, bz, trees)
+			}
+		}
+	}
+	if checked < 10 {
+		t.Fatalf("only %d parks were checked", checked)
 	}
 }

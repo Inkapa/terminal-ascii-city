@@ -22,6 +22,7 @@ const (
 	SurfaceGrass    = 3
 	SurfaceWater    = 4
 	SurfaceBoards   = 5 // decking and yard surfaces
+	SurfacePath     = 6 // gravel walks through a park
 )
 
 // Layers is the per-cell map. Every layer is MapSize*MapSize entries indexed

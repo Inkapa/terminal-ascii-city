@@ -98,3 +98,35 @@ func testFrame(cols int) *engine.Frame {
 	}
 	return f
 }
+
+// A walk is kerbed where it meets the grass beside it and nowhere else. The
+// kerb is what carries the shape of a park's walks at a distance, so losing it
+// or spreading it across the whole walk both matter.
+func TestWalkIsKerbedAtItsEdge(t *testing.T) {
+	w := testWorld()
+	for z := 0; z < engine.MapSize; z++ {
+		for x := 8; x <= 13; x++ {
+			surface := uint8(engine.SurfaceGrass)
+			if x == 10 || x == 11 {
+				surface = engine.SurfacePath
+			}
+			w.Surfaces[w.At(x, z)] = surface
+		}
+	}
+	r := New(w, Config{Cols: 8, Rows: 8})
+
+	for _, c := range []struct {
+		x, z float64
+		kerb bool
+	}{
+		{10.05, 5.5, true},  // the grass edge of the walk
+		{11.95, 5.5, true},  // and the other one
+		{10.95, 5.5, false}, // the join between the two walk cells
+		{10.5, 5.5, false},  // the middle of a cell
+	} {
+		if kerb, alongX := r.pathEdge(int(c.x), int(c.z), c.x, c.z); kerb != c.kerb || alongX {
+			t.Fatalf("at (%.2f,%.2f): kerb %v along x %v, want kerb %v across it",
+				c.x, c.z, kerb, alongX, c.kerb)
+		}
+	}
+}

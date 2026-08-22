@@ -1,5 +1,7 @@
 package engine
 
+import "math"
+
 // Building a chunk.
 //
 // A chunk is a window onto the plane. Generating one means asking the street
@@ -126,19 +128,15 @@ func (w *World) scatterShrubs(bx, bz int) {
 	}
 }
 
-// plant lays the open ground of a block: grass over a park or a court, boards
-// over a water garden, a pond cut into the middle of one, and a monument in
-// some parks.
+// plant lays the open ground of a block: grass over a court, boards over a
+// water garden, and a pond cut into the middle of one. A park block is laid
+// out in more detail, by layPark.
 func (w *World) plant(bx, bz int, g plot, l layout) {
-	originX, originZ := bx*BlockSpan, bz*BlockSpan
-	if l.ground == SurfaceGrass && g.x1-g.x0 > 10 && Hash01(bx, bz, saltMonument) > 0.72 {
-		w.Props = append(w.Props, Prop{
-			X:    float64(originX) + float64(g.x0+g.x1+1)/2 - float64(w.OriginX),
-			Z:    float64(originZ) + float64(g.z0+g.z1+1)/2 - float64(w.OriginZ),
-			Kind: PropMonument, Height: 5.8, Width: 3.8, Depth: 3.2,
-			Axis: 1, Boxlike: true,
-		})
+	if l.park {
+		w.layPark(bx, bz, g)
+		return
 	}
+	originX, originZ := bx*BlockSpan, bz*BlockSpan
 	// A pond is an ellipse inset from the edge of the decking, so there is
 	// always a walkable rim around it.
 	midX := float64(g.x0+g.x1) / 2
@@ -178,6 +176,160 @@ func (w *World) plant(bx, bz int, g plot, l layout) {
 				w.Kinds[i] = PropTree
 				w.Heights[i] = uint8(4 + HashInt(4, wx, wz, saltPlanting))
 			case roll > 0.2:
+				w.Kinds[i] = PropShrub
+				w.Heights[i] = 2
+			}
+		}
+	}
+}
+
+// Park geometry, in cells: how wide a walk is either side of its centre line,
+// how far the round at the crossing reaches, and how much of the round a pool
+// takes up when there is one.
+const (
+	parkWalkHalf = 1.0
+	parkRound    = 3.4
+	parkPool     = 1.9
+)
+
+// layPark gives a park block a shape: a walk around the edge, two more
+// crossing in the middle, a round where they meet with either a pool or a
+// monument at its centre, and lawn planted between them.
+func (w *World) layPark(bx, bz int, g plot) {
+	originX, originZ := bx*BlockSpan, bz*BlockSpan
+	midX := float64(g.x0+g.x1+1) / 2
+	midZ := float64(g.z0+g.z1+1) / 2
+	pool := Hash01(bx, bz, saltMonument) > 0.45
+
+	for z := g.z0; z <= g.z1; z++ {
+		for x := g.x0; x <= g.x1; x++ {
+			i := w.indexOfWorld(originX+x, originZ+z)
+			if i < 0 {
+				continue
+			}
+			offX := float64(x) + 0.5 - midX
+			offZ := float64(z) + 0.5 - midZ
+			r := math.Hypot(offX, offZ)
+			// Jittered per cell, so neither the round nor the pool reads as a
+			// drawn circle.
+			edge := 0.4 * (Hash01(originX+x, originZ+z, saltPark) - 0.5)
+			switch {
+			case pool && r < parkPool+edge:
+				w.Surfaces[i] = SurfaceWater
+			case r < parkRound+edge,
+				x == g.x0 || x == g.x1 || z == g.z0 || z == g.z1,
+				math.Abs(offX) < parkWalkHalf || math.Abs(offZ) < parkWalkHalf:
+				w.Surfaces[i] = SurfacePath
+			default:
+				w.Surfaces[i] = SurfaceGrass
+			}
+		}
+	}
+
+	if !pool {
+		w.Props = append(w.Props, Prop{
+			X:    float64(originX) + midX - float64(w.OriginX),
+			Z:    float64(originZ) + midZ - float64(w.OriginZ),
+			Kind: PropMonument, Height: 5.8, Width: 3.8, Depth: 3.2,
+			Axis: 1, Boxlike: true,
+		})
+	}
+	w.plantPark(bx, bz, g, midX, midZ)
+	w.seatPark(bx, bz, g, midX, midZ)
+	w.railPark(bx, bz, g, midX, midZ)
+}
+
+// seatPark puts a bench on the grass either side of each walk, a little way
+// out from the round, turned so it faces the walk and whatever stands in the
+// middle of the park. A seat whose cell is already planted is left out.
+func (w *World) seatPark(bx, bz int, g plot, midX, midZ float64) {
+	originX, originZ := bx*BlockSpan, bz*BlockSpan
+	out := parkRound + 1.6
+	beside := parkWalkHalf + 0.5
+	for _, s := range [2]float64{-1, 1} {
+		for _, side := range [2]float64{-beside, beside} {
+			w.seat(originX, originZ, midX+s*out, midZ+side, 0)
+			w.seat(originX, originZ, midX+side, midZ+s*out, 1)
+		}
+	}
+}
+
+// seat puts one bench down, taking where it stands in block-relative cells.
+func (w *World) seat(originX, originZ int, x, z float64, axis int) {
+	i := w.indexOfWorld(originX+int(x), originZ+int(z))
+	if i < 0 || w.Kinds[i] != KindOpen || w.Surfaces[i] != SurfaceGrass {
+		return
+	}
+	w.Props = append(w.Props, Prop{
+		X: float64(originX) + x - float64(w.OriginX),
+		Z: float64(originZ) + z - float64(w.OriginZ),
+		Kind: PropBench, Height: 0.8, Width: 1.9, Depth: propDepth[PropBench],
+		Axis: axis, Boxlike: true,
+	})
+}
+
+// Fence geometry, in cells: the length of one railing panel, and how far the
+// gate in the middle of a side reaches either way. Panels run out from the
+// gate to the corner, so the opening stays centred on the walk behind it.
+const (
+	parkPanel = 2.4
+	parkGate  = 1.4
+)
+
+// railPark fences a park off from the street, with a gate on each side where a
+// walk comes out of it and a post marking either end of the opening. The
+// railings stand on the last footway cell rather than on the park's own
+// perimeter walk, so the walk stays clear all the way round.
+func (w *World) railPark(bx, bz int, g plot, midX, midZ float64) {
+	originX, originZ := bx*BlockSpan, bz*BlockSpan
+	add := func(x, z float64, kind int, height, width float64, axis int) {
+		w.Props = append(w.Props, Prop{
+			X:    float64(originX) + x - float64(w.OriginX),
+			Z:    float64(originZ) + z - float64(w.OriginZ),
+			Kind: kind, Height: height, Width: width, Axis: axis,
+		})
+	}
+	// The two lines a fence runs along, either side of the park, and how far
+	// each one runs from the gate to the corner.
+	nearSide, farSide := float64(g.x0)-0.5, float64(g.x1)+1.5
+	reach := float64(g.x1-g.x0+1) / 2
+
+	for d := parkGate + parkPanel/2; d < reach; d += parkPanel {
+		for _, s := range [2]float64{-1, 1} {
+			add(midX+s*d, nearSide, PropRailing, 1.25, parkPanel, 0)
+			add(midX+s*d, farSide, PropRailing, 1.25, parkPanel, 0)
+			add(nearSide, midZ+s*d, PropRailing, 1.25, parkPanel, 1)
+			add(farSide, midZ+s*d, PropRailing, 1.25, parkPanel, 1)
+		}
+	}
+	for _, s := range [2]float64{-1, 1} {
+		add(midX+s*parkGate, nearSide, PropPost, 1.15, 0.35, 0)
+		add(midX+s*parkGate, farSide, PropPost, 1.15, 0.35, 0)
+		add(nearSide, midZ+s*parkGate, PropPost, 1.15, 0.35, 1)
+		add(farSide, midZ+s*parkGate, PropPost, 1.15, 0.35, 1)
+	}
+}
+
+// plantPark scatters trees and shrubs over a park's lawns. They sit on a
+// three-cell lattice, each one knocked up to a cell off it, so the planting
+// keeps a gap to itself without lining up into an orchard. Only shrubs go in
+// around the round, which leaves the middle of the park open to look across.
+func (w *World) plantPark(bx, bz int, g plot, midX, midZ float64) {
+	originX, originZ := bx*BlockSpan, bz*BlockSpan
+	for z := g.z0; z <= g.z1; z += 3 {
+		for x := g.x0; x <= g.x1; x += 3 {
+			wx := originX + x + HashInt(2, x, z, bx, bz, saltPark)
+			wz := originZ + z + HashInt(2, z, x, bz, bx, saltPark)
+			i := w.indexOfWorld(wx, wz)
+			if i < 0 || w.Kinds[i] != KindOpen || w.Surfaces[i] != SurfaceGrass {
+				continue
+			}
+			r := math.Hypot(float64(wx-originX)+0.5-midX, float64(wz-originZ)+0.5-midZ)
+			switch roll := Hash01(wx, wz, saltPlanting); {
+			case r > parkRound+1 && roll > 0.22:
+				w.Kinds[i] = PropTree
+				w.Heights[i] = uint8(5 + HashInt(4, wx, wz, saltPlanting))
+			case roll > 0.62:
 				w.Kinds[i] = PropShrub
 				w.Heights[i] = 2
 			}

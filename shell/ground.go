@@ -67,17 +67,99 @@ func (r *Renderer) paintGround(col, row int, dirX, dirZ float64) {
 		r.paintMarkingCell(col, row, wx, wz, mz, f, tex, near)
 	case engine.SurfaceBoards:
 		r.paintBoardCell(col, row, ix, fx, fz, f, tex, dist)
+	case engine.SurfacePath:
+		r.paintPathCell(col, row, ix, iz, fx, fz, lx, lz, f, tex, dist, near)
 	default:
-		glyph := '*'
-		switch {
-		case tex < 0.5:
-			glyph = ','
-		case tex < 0.8:
-			glyph = '.'
-		}
-		hue, sat := haze(110, 55, dist, 0, groundLimit)
-		r.screen.Set(col, row, glyph, hsl(hue, sat, 18+22*f))
+		r.paintGrassCell(col, row, fx, fz, f, tex, dist, near)
 	}
+}
+
+// paintGrassCell is lawn. Mowing runs in bands three cells wide, and the pile
+// lies the other way in every second one, so a park does not read as one flat
+// green. Close up the turf breaks into tufts, with the odd flower head in it.
+func (r *Renderer) paintGrassCell(col, row, fx, fz int, f, tex, dist float64, near bool) {
+	// Which way the mower went alternates from one block to the next, so two
+	// lawns in sight of each other are not striped the same way.
+	along := fz
+	if (floorMod(fx, 64) < 32) != (floorMod(fz, 64) < 32) {
+		along = fx
+	}
+	band := floorMod(along, 6) < 3
+	hue, sat := haze(112, 46, dist, 0, groundLimit)
+	light := 29 + 24*f
+	if band {
+		hue, sat = haze(100, 54, dist, 0, groundLimit)
+		light += 5
+	}
+	if near && hashRand(float64(7*fx+3), float64(11*fz+5)) > 0.982 {
+		r.screen.Set(col, row, '*', hsl(48, 62, 54+16*f))
+		return
+	}
+	glyph := '.'
+	switch {
+	case tex > 0.82:
+		glyph = '"'
+		light += 6
+	case tex > 0.6:
+		glyph = ','
+	case tex < 0.22:
+		glyph = '`'
+	}
+	r.screen.Set(col, row, glyph, hsl(hue, sat, light))
+}
+
+// kerbBand is how much of a cell either side of a walk's edge the kerb takes.
+const kerbBand = 0.24
+
+// paintPathCell is a park walk: rolled gravel, with a stone catching the light
+// here and there, and a kerb where it runs up against grass or water. The kerb
+// is what draws the shape of the walks from a distance.
+func (r *Renderer) paintPathCell(col, row, ix, iz, fx, fz int, lx, lz, f, tex, dist float64, near bool) {
+	if near {
+		if kerb, alongX := r.pathEdge(ix, iz, lx, lz); kerb {
+			glyph := '|'
+			if alongX {
+				glyph = '='
+			}
+			hue, sat := haze(40, 16, dist, 0, groundLimit)
+			r.screen.Set(col, row, glyph, hsl(hue, sat, 52+22*f))
+			return
+		}
+	}
+	hue, sat := haze(34, 16, dist, 0, groundLimit)
+	light := 42 + 26*f
+	glyph := ':'
+	switch {
+	case near && hashRand(float64(13*fx), float64(17*fz)) > 0.97:
+		glyph = 'o'
+		light += 7
+	case tex < 0.34:
+		glyph = '.'
+	case tex > 0.86:
+		glyph = ','
+		light -= 4
+	}
+	r.screen.Set(col, row, glyph, hsl(hue, sat, light))
+}
+
+// pathEdge reports whether a point sits in the band along the edge of a walk,
+// and whether that edge runs across the x axis rather than down it.
+func (r *Renderer) pathEdge(ix, iz int, lx, lz float64) (bool, bool) {
+	u := lx - math.Floor(lx)
+	v := lz - math.Floor(lz)
+	switch {
+	case u < kerbBand && r.offPath(ix-1, iz), u > 1-kerbBand && r.offPath(ix+1, iz):
+		return true, false
+	case v < kerbBand && r.offPath(ix, iz-1), v > 1-kerbBand && r.offPath(ix, iz+1):
+		return true, true
+	}
+	return false, false
+}
+
+// offPath reports whether a cell is anything other than a walk.
+func (r *Renderer) offPath(ix, iz int) bool {
+	i := r.world.At(ix, iz)
+	return i < 0 || r.world.Surfaces[i] != engine.SurfacePath
 }
 
 // paintRoadCell is the carriageway: tarmac with the painted lattice on top.

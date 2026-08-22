@@ -6,7 +6,7 @@ package engine
 // in each one. A block gets one of seven layouts, drawn by weight from a hash
 // of the block's coordinates:
 //
-//	park            an open block given over to planting
+//	park            an open block of lawn, walks and a planted round
 //	water garden    an open block decked over, with a pond in it
 //	pinwheel        four bars turned around a planted central court
 //	quadrants       four square towers with a cross of alleys between them
@@ -53,6 +53,7 @@ type layout struct {
 	ground  uint8
 	planted *plot // the part of the block the ground covers
 	pond    bool  // and whether there is water in the middle of it
+	park    bool  // laid out with walks and a round rather than as open lawn
 }
 
 // wholeBlock is the block's interior, from the footway inward.
@@ -62,8 +63,9 @@ var wholeBlock = plot{16, 16, 31, 31, edgeAny}
 // a cumulative distribution. They add up to one.
 var layouts = []layout{
 	{
-		// A park: nothing built, the whole interior planted.
-		weight: 0.145, ground: SurfaceGrass, planted: &wholeBlock,
+		// A park: nothing built, the whole interior given over to lawn,
+		// walks and a round in the middle.
+		weight: 0.145, ground: SurfaceGrass, planted: &wholeBlock, park: true,
 	},
 	{
 		// The same lot decked over, with a pond in the middle of it.

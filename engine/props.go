@@ -139,8 +139,12 @@ func Furnish(w *World) []Prop {
 
 			case surface != SurfacePavement:
 				if surface == SurfaceGrass {
+					// A park seats itself, beside its walks. This is for the
+					// courts the other layouts leave open.
+					bx, bz, _, _ := BlockOf(wx, wz)
+					l, _ := layoutOf(bx, bz)
 					switch {
-					case mod(wx+wz, 13) == 0 && roll > 0.77:
+					case !l.park && mod(wx+wz, 13) == 0 && roll > 0.77:
 						add(px, pz, PropBench, 0.8, 1.9, wx&1)
 					case (wx%16 == 0 || wz%16 == 0) && roll > 0.91:
 						axis := 0
