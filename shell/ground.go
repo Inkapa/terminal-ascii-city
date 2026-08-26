@@ -330,17 +330,26 @@ func (r *Renderer) paintWaterCell(col, row int, wx, wz float64, f float64) {
 	swell := math.Sin(wx*0.9+r.cfg.Time*0.7) + math.Sin(wz*1.3-r.cfg.Time*0.5)
 	glint := hashRand(math.Floor(wx*2), math.Floor(wz*2)+math.Floor(r.cfg.Time*1.5))
 
+	// Columns that look toward the moon carry its path across the water: more
+	// broken light, and a warmer tone under it.
+	bearing := r.view.Yaw + math.Atan2(r.view.planeAt[col], 1)
+	moon := math.Max(0, 1-math.Abs(wrapPi(bearing-moonBearing))/moonPathAngle)
+
 	switch {
-	case glint > 0.985:
+	case glint > 0.985-0.06*moon:
 		// a light on the far bank, caught and let go again
-		r.screen.Set(col, row, '*', hsl(48, 70, 46+18*f))
+		r.screen.Set(col, row, '*', hsl(moonHue, 70, 46+18*f+14*moon))
 	case swell > 1.1:
-		r.screen.Set(col, row, '~', hsl(198, 45, 26+20*f))
+		r.screen.Set(col, row, '~', hsl(198-40*moon, 45, 26+20*f+10*moon))
 	case swell > 0.2:
-		r.screen.Set(col, row, '-', hsl(202, 40, 18+16*f))
+		r.screen.Set(col, row, '-', hsl(202-30*moon, 40, 18+16*f+8*moon))
 	case swell < -1.1:
 		r.screen.Set(col, row, '=', hsl(205, 38, 14+14*f))
 	default:
 		r.screen.Set(col, row, '.', hsl(208, 35, 10+12*f))
 	}
 }
+
+// moonPathAngle is how wide, either side of the moon's bearing, the broken
+// light on the water reaches.
+const moonPathAngle = 0.30

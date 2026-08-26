@@ -38,6 +38,7 @@ const (
 	keyLookDown
 	keySprint
 	keyUse
+	keyStatus
 )
 
 func newKeyboard() *keyboard {
@@ -84,6 +85,8 @@ func (k *keyboard) handle(msg tea.KeyMsg) {
 			k.press(keyLookDown, now)
 		case 'e', 'E':
 			k.press(keyUse, now)
+		case 'h', 'H':
+			k.press(keyStatus, now)
 		case 'q':
 			k.quit = true
 		}
