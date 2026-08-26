@@ -78,6 +78,8 @@ func (m *model) View() string {
 		return ""
 	}
 	screen := m.sess.render()
-	shell.Status(screen, m.sess.status())
+	if m.sess.hud {
+		shell.Status(screen, m.sess.status())
+	}
 	return shell.Ansi(screen)
 }

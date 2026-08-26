@@ -34,6 +34,7 @@ go run ./cmd/city
 
 The frame fills the terminal and follows it on resize. The bottom row shows the
 camera position, the direction it faces, and whatever `E` would do from here.
+`H` hides that row, for a clean view of the frame.
 
 Walking never runs out of city. The loaded chunk regenerates around the camera
 once it comes within sight of an edge. Each run uses a random seed unless

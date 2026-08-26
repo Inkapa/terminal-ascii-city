@@ -23,10 +23,12 @@ type session struct {
 	floor  int
 	street engine.Player // where we left the camera when we went in
 	clock  float64
+
+	hud bool // whether the status row is drawn
 }
 
 func newSession(w *engine.World) *session {
-	return &session{world: w, cam: w.Spawn()}
+	return &session{world: w, cam: w.Spawn(), hud: true}
 }
 
 // resize rebuilds the renderers when the terminal changes shape.
@@ -52,6 +54,9 @@ func (s *session) step(k *keyboard, dt float64) {
 	}
 	if k.tapped(keyUse) {
 		s.useDoor()
+	}
+	if k.tapped(keyStatus) {
+		s.hud = !s.hud
 	}
 	if s.room != nil {
 		s.cam = engine.MoveInside(s.room, s.cam, in, dt)
@@ -210,13 +215,13 @@ func (s *session) status() string {
 		case s.nearLift() && s.floorCount() > 1:
 			out = fmt.Sprintf("   E to call the lift (floor %d of %d)", s.floor+1, s.floorCount())
 		}
-		return s.room.Label + out + "   |  WASD move, arrows look, Q quit"
+		return s.room.Label + out + "   |  WASD move, arrows look, H hide this, Q quit"
 	}
 	near := ""
 	if i, ok := s.nearBuildingSite(); ok {
 		near = "   E to go into " + s.world.Sites[i].Descriptor.Label
 	}
-	return fmt.Sprintf("seed %d   %d, %d %s%s   |  WASD move, shift to run, arrows look, Q quit",
+	return fmt.Sprintf("seed %d   %d, %d %s%s   |  WASD move, shift to run, arrows look, H hide this, Q quit",
 		engine.Seed(), s.world.OriginX+int(s.cam.X), s.world.OriginZ+int(s.cam.Z),
 		compass(s.cam.Yaw), near)
 }
