@@ -1,6 +1,6 @@
 <div align="center">
  
-![](https://files.catbox.moe/5zw28f.png)
+![Screenshot of the city in terminal](https://files.catbox.moe/5zw28f.png)
  
 A procedural raycasted city rendered as coloured ASCII characters inside your terminal.
 </div>
