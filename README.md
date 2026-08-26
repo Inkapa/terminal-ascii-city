@@ -1,6 +1,6 @@
 <div align="center">
  
-![Screenshot of the city in terminal](https://files.catbox.moe/5zw28f.png)
+![ASCII City title font](https://files.catbox.moe/5zw28f.png)
  
 A procedural raycasted city rendered as coloured ASCII characters inside your terminal.
 </div>
@@ -11,7 +11,7 @@ A procedural raycasted city rendered as coloured ASCII characters inside your te
 
 ---
  
-![Screenshot of the rendered city](https://files.catbox.moe/x7ys44.png)
+![Screenshot of the city in terminal](https://files.catbox.moe/x7ys44.png)
 
 Streets, blocks, buildings, planting and props are all procedurally generated from world
 coordinates. Buildings have multiple floors and can be entered. 
